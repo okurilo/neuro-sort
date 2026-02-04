@@ -7,12 +7,21 @@ import type { IWidget } from "../../types";
 
 type RendererDataSource = NonNullable<RootProps["dataSource"]>;
 
+/**
+ * Проверяет, что значение является объектом-словарём.
+ */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null;
 
+/**
+ * Безопасно приводит значение к Record.
+ */
 const toRecord = (value: unknown): Record<string, unknown> | null =>
     isRecord(value) ? value : null;
 
+/**
+ * Собирает URL для renderer-данных из template + options.
+ */
 const buildRendererUrl = (
     uriTemplate: string,
     options: RendererDataSource["options"]
@@ -24,6 +33,9 @@ const buildRendererUrl = (
         .valueOf();
 };
 
+/**
+ * Загружает данные для renderer-виджета через dataSource.
+ */
 export const loadRendererData = async (
     dataSource: RendererDataSource,
     abortController: AbortController
@@ -41,6 +53,9 @@ export const loadRendererData = async (
     return response.json();
 };
 
+/**
+ * Ищет первый http.* action в onMount.
+ */
 const findHttpActionIndex = (actions: unknown[]): number => {
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
@@ -58,6 +73,9 @@ const findHttpActionIndex = (actions: unknown[]): number => {
     return -1;
 };
 
+/**
+ * Превращает onMount action в dataSource.
+ */
 const toDataSourceFromAction = (action: Record<string, unknown>): RendererDataSource => {
     const actionType = typeof action.type === "string" ? action.type : "";
     const method = actionType.split(".")[1];
@@ -74,6 +92,9 @@ const toDataSourceFromAction = (action: Record<string, unknown>): RendererDataSo
     };
 };
 
+/**
+ * Переносит http.* onMount в dataSource и чистит triggers.
+ */
 export const migrateOnMountToDataSource = (body: unknown) => {
     const bodyObj = toRecord(body);
     if (!bodyObj) return body;
@@ -197,6 +218,9 @@ const CODE_TO_CATEGORY: Record<string, string> = Object.entries(CATEGORY_MAPPING
     {} as Record<string, string>
 );
 
+/**
+ * Валидирует бизнес-данные: пустые строки/массивы/объекты считаем невалидными.
+ */
 export const validateBusinessData = (data: unknown): boolean => {
     if (data === null || data === undefined) return false;
 
@@ -208,6 +232,9 @@ export const validateBusinessData = (data: unknown): boolean => {
     return true;
 };
 
+/**
+ * Достаёт dataSource из renderer-виджета (включая миграцию).
+ */
 const getRendererDataSource = (widget: IWidget): RendererDataSource | null => {
     if (widget.type !== "renderer") return null;
 
@@ -225,6 +252,9 @@ const getRendererDataSource = (widget: IWidget): RendererDataSource | null => {
     return null;
 };
 
+/**
+ * Достаёт dataSource из importedWidget.
+ */
 const getImportedWidgetDataSource = (widget: IWidget): RendererDataSource | null => {
     if (widget.type !== "importedWidget") return null;
     const record = toRecord(widget as unknown);
@@ -232,10 +262,16 @@ const getImportedWidgetDataSource = (widget: IWidget): RendererDataSource | null
     return record.dataSource as RendererDataSource;
 };
 
+/**
+ * Унифицированно возвращает dataSource для виджета, если есть.
+ */
 export const getDataSource = (widget: IWidget): RendererDataSource | null => {
     return getRendererDataSource(widget) ?? getImportedWidgetDataSource(widget);
 };
 
+/**
+ * Раскладывает виджеты по категориям, лишние уходят в FALLBACK_CATEGORY.
+ */
 export const categorizeWidgets = (widgets: IWidget[]): Record<string, IWidget[]> => {
     const result: Record<string, IWidget[]> = {};
     const fallback: IWidget[] = [];

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import { useIntersectionObserver } from "usehooks-ts";
 import { normalizeSize } from "../../../../helpers/normalizeSize";
 import { widgetsShowChanged } from "../../stores/widgets-show";
@@ -11,18 +11,11 @@ import {
     loadRendererData,
     validateBusinessData,
 } from "./utils";
-
-type CategoryLoadStatus = "pending" | "loading" | "ready" | "empty";
-
-export interface WidgetWithPrefetch extends IWidget {
-    $prefetchMode: boolean;
-}
-
-export interface CategoryStatus {
-    status: CategoryLoadStatus;
-    validWidgets: WidgetWithPrefetch[];
-    validCount: number;
-}
+import { CategoryStatus, WidgetWithPrefetch } from "./useWidgetsWithPrefetch.types";
+import {
+    categoriesReducer,
+    initialState,
+} from "./reducer";
 
 export interface PreparedCategory {
     title: string;
@@ -34,6 +27,9 @@ const LOAD_MORE_ROOT_MARGIN = "200px 0px";
 
 /**
  * LEGACY: НЕ ТРОГАЕМ
+ */
+/**
+ * Разделяет виджеты на minor и остальные по availableSizes.
  */
 const splitMinorsAndOthers = <T extends { availableSizes: unknown }>(widgets: T[]) => {
     const minors: T[] = [];
@@ -50,6 +46,9 @@ const splitMinorsAndOthers = <T extends { availableSizes: unknown }>(widgets: T[
     return { minors, others };
 };
 
+/**
+ * Сортирует виджеты по legacy-правилам размещения в гриде.
+ */
 const sortWidgets = <T extends { availableSizes: unknown }>(widgets: T[]): T[] => {
     const { minors, others } = splitMinorsAndOthers(widgets);
     const result: T[] = [];
@@ -92,7 +91,10 @@ const sortWidgets = <T extends { availableSizes: unknown }>(widgets: T[]): T[] =
     return result;
 };
 
-const toFinalWidget = (
+/**
+ * Приводит виджет к финальному виду для рендера.
+ */
+const finalizeWidget = (
     widget: IWidget,
     overrides?: Partial<WidgetWithPrefetch>
 ): WidgetWithPrefetch => ({
@@ -102,7 +104,36 @@ const toFinalWidget = (
     ...overrides,
 });
 
-const buildCategoryQueue = (categorized: Record<string, IWidget[]>): string[] => {
+/**
+ * Загружает/валидирует данные виджета и возвращает финальную модель.
+ * Если данные невалидны — возвращает null.
+ */
+const resolveWidget = async (
+    widget: IWidget,
+    abortController: AbortController
+): Promise<WidgetWithPrefetch | null> => {
+    if (widget.type === "importedWidget") {
+        return finalizeWidget(widget);
+    }
+
+    const dataSource = getDataSource(widget);
+    if (!dataSource) {
+        return finalizeWidget(widget);
+    }
+
+    try {
+        const data = await loadRendererData(dataSource, abortController);
+        if (!validateBusinessData(data)) return null;
+        return finalizeWidget(widget, { data, dataSource: undefined });
+    } catch {
+        return finalizeWidget(widget);
+    }
+};
+
+/**
+ * Формирует очередь категорий по заданному порядку, включая fallback.
+ */
+const createQueue = (categorized: Record<string, IWidget[]>): string[] => {
     const ordered = Object.entries(CATEGORY_MAPPING)
         .map(([name, config]) => ({ name, ordering: config.ordering }))
         .sort((a, b) => a.ordering - b.ordering)
@@ -115,7 +146,10 @@ const buildCategoryQueue = (categorized: Record<string, IWidget[]>): string[] =>
     return ordered;
 };
 
-const buildInitialStatus = (
+/**
+ * Создаёт стартовые статусы категорий (pending/empty).
+ */
+const createInitialStatus = (
     queue: string[],
     categorized: Record<string, IWidget[]>
 ): Record<string, CategoryStatus> => {
@@ -133,28 +167,19 @@ const buildInitialStatus = (
     return initial;
 };
 
-const findNextPendingCategory = (
-    queue: string[],
-    statuses: Record<string, CategoryStatus>
-): string | null => {
-    for (let i = 0; i < queue.length; i++) {
-        const name = queue[i];
-        const status = statuses[name];
-        if (status && status.status === "pending") {
-            return name;
-        }
-    }
-
-    return null;
-};
-
+/**
+ * Ограничивает запрошенное количество категорий допустимым диапазоном.
+ */
 const clampRequestedCount = (value: number, max: number): number => {
     if (value < 0) return 0;
     if (value > max) return max;
     return value;
 };
 
-const getPreparedCount = (
+/**
+ * Считает, сколько первых категорий подряд уже подготовлены.
+ */
+const countPrepared = (
     queue: string[],
     statuses: Record<string, CategoryStatus>
 ): number => {
@@ -171,7 +196,31 @@ const getPreparedCount = (
     return count;
 };
 
-const getPreparedCategories = (
+/**
+ * Находит первую pending-категорию в пределах лимита.
+ */
+const findPendingCategory = (
+    queue: string[],
+    statuses: Record<string, CategoryStatus>,
+    limit: number
+): string | null => {
+    const maxIndex = Math.min(limit, queue.length);
+
+    for (let i = 0; i < maxIndex; i++) {
+        const name = queue[i];
+        const status = statuses[name];
+        if (status && status.status === "pending") {
+            return name;
+        }
+    }
+
+    return null;
+};
+
+/**
+ * Собирает готовые категории для рендера в исходном порядке.
+ */
+const collectPrepared = (
     queue: string[],
     statuses: Record<string, CategoryStatus>,
     preparedCount: number
@@ -193,14 +242,13 @@ const getPreparedCategories = (
 };
 
 export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
-    const [categoriesStatus, setCategoriesStatus] = useState<Record<string, CategoryStatus>>({});
-    const [categoryQueue, setCategoryQueue] = useState<string[]>([]);
-    const [requestedCount, setRequestedCount] = useState(0);
+    const [state, dispatch] = useReducer(categoriesReducer, initialState);
 
+    // Нужен чтобы отменять текущие prefetch-запросы при смене widgets/размонтаже.
     const abortControllerRef = useRef<AbortController>(new AbortController());
-    const inFlightRef = useRef(false);
+    // Сигнализируем в store один раз, когда показали первые валидные виджеты.
     const hasShownWidgetsRef = useRef(false);
-    const categorizedCandidatesRef = useRef<Record<string, IWidget[]>>({});
+    // Debounce для IntersectionObserver: реагируем один раз на вход в зону видимости.
     const wasIntersectingRef = useRef(false);
 
     const widgetsKey = useMemo(
@@ -209,30 +257,31 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     );
 
     useEffect(() => {
+        // Полный reset при смене входных widgets.
         abortControllerRef.current.abort();
         abortControllerRef.current = new AbortController();
 
-        inFlightRef.current = false;
         hasShownWidgetsRef.current = false;
         wasIntersectingRef.current = false;
 
         const categorized = categorizeWidgets(widgets);
-        categorizedCandidatesRef.current = categorized;
-
-        const queue = buildCategoryQueue(categorized);
-        const initial = buildInitialStatus(queue, categorized);
+        const queue = createQueue(categorized);
+        const initial = createInitialStatus(queue, categorized);
         const initialRequests = clampRequestedCount(INITIAL_VISIBLE_CATEGORIES, queue.length);
 
-        setCategoryQueue(queue);
-        setCategoriesStatus(initial);
-        setRequestedCount(initialRequests);
+        dispatch({
+            type: "reset",
+            payload: {
+                queue,
+                statuses: initial,
+                candidates: categorized,
+                requestedCount: initialRequests,
+            },
+        });
     }, [widgetsKey]);
 
-    const preparedCount = useMemo(
-        () => getPreparedCount(categoryQueue, categoriesStatus),
-        [categoryQueue, categoriesStatus]
-    );
-    const hasMore = preparedCount < categoryQueue.length;
+    const preparedCount = state.preparedCount;
+    const hasMore = preparedCount < state.queue.length;
 
     const { ref: loadMoreObserverRef, isIntersecting } = useIntersectionObserver({
         threshold: 0,
@@ -240,6 +289,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     });
 
     useEffect(() => {
+        // Догружаем ещё одну категорию при первом входе sentinel в зону видимости.
         if (!isIntersecting) {
             wasIntersectingRef.current = false;
             return;
@@ -250,100 +300,97 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
         if (!hasMore) return;
 
-        setRequestedCount((prev) => {
-            const next = prev + 1;
-            return clampRequestedCount(next, categoryQueue.length);
-        });
-    }, [isIntersecting, hasMore, categoryQueue.length]);
+        const nextRequested = clampRequestedCount(
+            state.requestedCount + 1,
+            state.queue.length
+        );
+        dispatch({ type: "request_more", payload: { requestedCount: nextRequested } });
+    }, [hasMore, isIntersecting, state.queue.length, state.requestedCount]);
 
     useEffect(() => {
-        if (inFlightRef.current) return;
-        if (requestedCount <= preparedCount) return;
+        // Поднимаем одну категорию за раз, пока requestedCount > preparedCount.
+        if (state.inFlight) return;
+        if (state.requestedCount <= preparedCount) return;
 
-        const nextName = findNextPendingCategory(categoryQueue, categoriesStatus);
+        const nextName = findPendingCategory(
+            state.queue,
+            state.statuses,
+            state.requestedCount
+        );
         if (!nextName) return;
 
-        inFlightRef.current = true;
-
-        setCategoriesStatus((prev) => {
-            const prevItem = prev[nextName];
-            if (!prevItem) return prev;
-            if (prevItem.status !== "pending") return prev;
-            return {
-                ...prev,
-                [nextName]: { ...prevItem, status: "loading" },
-            };
-        });
+        dispatch({ type: "category_loading", payload: { name: nextName } });
 
         const run = async () => {
-            const candidates = sortWidgets(categorizedCandidatesRef.current[nextName] || []);
+            const candidates = sortWidgets(state.candidates[nextName] || []);
             const valid: WidgetWithPrefetch[] = [];
 
             for (const widget of candidates) {
-                if (widget.type === "importedWidget") {
-                    valid.push(toFinalWidget(widget));
-                } else {
-                    const dataSource = getDataSource(widget);
-                    if (!dataSource) {
-                        valid.push(toFinalWidget(widget));
-                    } else {
-                        try {
-                            const data = await loadRendererData(
-                                dataSource,
-                                abortControllerRef.current
-                            );
-                            if (validateBusinessData(data)) {
-                                valid.push(
-                                    toFinalWidget(widget, { data, dataSource: undefined })
-                                );
-                            }
-                        } catch {
-                            valid.push(toFinalWidget(widget));
-                        }
-                    }
-                }
+                const resolved = await resolveWidget(
+                    widget,
+                    abortControllerRef.current
+                );
+                if (resolved) valid.push(resolved);
             }
 
             return valid;
         };
 
+        const abortSignal = abortControllerRef.current.signal;
+
         run()
             .then((valid) => {
+                if (abortSignal.aborted) return;
                 if (!valid) return;
-                const validCount = valid.length;
 
-                setCategoriesStatus((prev) => {
-                    const prevItem = prev[nextName];
-                    if (!prevItem) return prev;
-                    const nextItem: CategoryStatus = {
-                        ...prevItem,
-                        status: validCount > 0 ? "ready" : "empty",
-                        validWidgets: valid,
-                        validCount,
-                    };
-                    return { ...prev, [nextName]: nextItem };
+                const validCount = valid.length;
+                const nextStatus: CategoryStatus = {
+                    status: validCount > 0 ? "ready" : "empty",
+                    validWidgets: valid,
+                    validCount,
+                };
+                const nextStatuses: Record<string, CategoryStatus> = {
+                    ...state.statuses,
+                    [nextName]: nextStatus,
+                };
+
+                dispatch({
+                    type: "category_resolved",
+                    payload: {
+                        name: nextName,
+                        status: nextStatus,
+                        preparedCount: countPrepared(state.queue, nextStatuses),
+                    },
                 });
 
-                if (!hasShownWidgetsRef.current && validCount > 0) {
+                if (!hasShownWidgetsRef.current && valid.length > 0) {
                     hasShownWidgetsRef.current = true;
                     widgetsShowChanged();
                 }
             })
-            .catch(() => {})
-            .finally(() => {
-                inFlightRef.current = false;
+            .catch(() => {
+                if (abortSignal.aborted) return;
+                dispatch({ type: "category_failed" });
             });
-    }, [categoryQueue, categoriesStatus, preparedCount, requestedCount]);
+    }, [
+        preparedCount,
+        state.candidates,
+        state.inFlight,
+        state.queue,
+        state.requestedCount,
+        state.statuses,
+    ]);
 
     useEffect(() => {
+        // Гарантированно отменяем запросы при размонтаже.
         return () => {
             abortControllerRef.current.abort();
         };
     }, []);
 
     const preparedCategories = useMemo(
-        () => getPreparedCategories(categoryQueue, categoriesStatus, preparedCount),
-        [categoryQueue, categoriesStatus, preparedCount]
+        () => collectPrepared(state.queue, state.statuses, preparedCount),
+        [preparedCount, state.queue, state.statuses]
     );
 
     return {
