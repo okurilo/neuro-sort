@@ -183,6 +183,10 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
     useEffect(() => {
         sentinelInViewRef.current = isIntersecting;
+        if (!isIntersecting && needNextRef.current) {
+            debugLog("need-next-reset", { reason: "observer-out" });
+            needNextRef.current = false;
+        }
         debugLog("observer", {
             isIntersecting,
             hasMore,
@@ -201,11 +205,18 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
             return;
         }
 
+        needNextRef.current = true;
         setVisibleCategoriesCount((prev) => {
             const next = prev < categoryQueue.length ? prev + 1 : prev;
-            debugLog("advance-by-observer", { prev, next, queueLength: categoryQueue.length });
+            debugLog("advance-by-observer", {
+                prev,
+                next,
+                queueLength: categoryQueue.length,
+                needNext: needNextRef.current,
+            });
             return next;
         });
+        debugLog("need-next-reset", { reason: "observer-advance" });
         needNextRef.current = false;
     }, [isIntersecting, hasMore, categoryQueue.length]);
 
@@ -324,7 +335,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                     return;
                 }
 
-                if (needNextRef.current || sentinelInViewRef.current) {
+                if (needNextRef.current) {
                     setVisibleCategoriesCount((prev) => {
                         const next = prev < categoryQueue.length ? prev + 1 : prev;
                         debugLog("auto-advance", {
