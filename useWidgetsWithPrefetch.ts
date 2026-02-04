@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useIntersectionObserver } from "usehooks-ts";
 import { normalizeSize } from "../../../../helpers/normalizeSize";
 import { widgetsShowChanged } from "../../stores/widgets-show";
 import type { IWidget } from "../../types";
@@ -24,12 +25,6 @@ export interface CategoryStatus {
 }
 
 const INITIAL_VISIBLE_CATEGORIES = 2;
-
-const buildWidgetsKey = (widgets: IWidget[]) => {
-    const parts = widgets.map((w) => `${String(w.id)}:${String(w.code)}`);
-    parts.sort();
-    return parts.join("|");
-};
 
 /**
  * LEGACY: НЕ ТРОГАЕМ
@@ -91,52 +86,6 @@ const sortWidgets = <T extends { availableSizes: unknown }>(widgets: T[]): T[] =
     return result;
 };
 
-const buildQueue = (categorizedCandidates: Record<string, IWidget[]>) => {
-    const base = Object.entries(CATEGORY_MAPPING)
-        .map(([name, config]) => ({ name, ordering: config.ordering }))
-        .sort((a, b) => a.ordering - b.ordering)
-        .map((x) => x.name);
-
-    if ((categorizedCandidates[FALLBACK_CATEGORY] || []).length > 0) {
-        base.push(FALLBACK_CATEGORY);
-    }
-
-    return base;
-};
-
-const initStatus = (
-    queue: string[],
-    categorizedCandidates: Record<string, IWidget[]>
-): Record<string, CategoryStatus> => {
-    const initial: Record<string, CategoryStatus> = {};
-    for (const name of queue) {
-        const candidates = categorizedCandidates[name] || [];
-        initial[name] = {
-            status: candidates.length > 0 ? "pending" : "empty",
-            validWidgets: [],
-            validCount: 0,
-        };
-    }
-    return initial;
-};
-
-const isTerminal = (status: CategoryLoadStatus) =>
-    status === "ready" || status === "empty";
-
-const findNextPending = (
-    queue: string[],
-    statusMap: Record<string, CategoryStatus>,
-    visibleCount: number
-): string | null => {
-    const maxIndex = Math.min(visibleCount, queue.length);
-    for (let i = 0; i < maxIndex; i++) {
-        const name = queue[i];
-        const st = statusMap[name];
-        if (st && st.status === "pending") return name;
-    }
-    return null;
-};
-
 const toFinalWidget = (
     widget: IWidget,
     overrides?: Partial<WidgetWithPrefetch>
@@ -152,280 +101,174 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const [categoryQueue, setCategoryQueue] = useState<string[]>([]);
     const [visibleCategoriesCount, setVisibleCategoriesCount] = useState(INITIAL_VISIBLE_CATEGORIES);
     const [isLoadingCategory, setIsLoadingCategory] = useState(false);
-    const [hasUserScrolled, setHasUserScrolled] = useState(false);
 
-    // --- stability / anti-race ---
     const runIdRef = useRef(0);
     const abortControllerRef = useRef<AbortController>(new AbortController());
-    const isProcessingRef = useRef(false);
+    const inFlightRef = useRef(false);
     const hasShownWidgetsRef = useRef(false);
-
-    // --- derived cached ---
     const categorizedCandidatesRef = useRef<Record<string, IWidget[]>>({});
-    const queueLenRef = useRef(0);
-
-    // --- sentinel controller ---
-    const observerRef = useRef<IntersectionObserver | null>(null);
     const sentinelInViewRef = useRef(false);
-    const pendingTriggerRef = useRef(false); // “пересёкся во время загрузки”
-    const cooldownRef = useRef(false); // “уже догрузили 1 шаг, ждём следующего скролла”
-    const revealInFlightRef = useRef(false);
 
-    // stable key = реальная смена набора
-    const widgetsKey = useMemo(() => buildWidgetsKey(widgets), [widgets]);
+    const widgetsKey = useMemo(
+        () => widgets.map((w) => String(w.code)).sort().join("|"),
+        [widgets]
+    );
 
-    // INIT (не по производным объектам!)
     useEffect(() => {
         runIdRef.current += 1;
 
         abortControllerRef.current.abort();
         abortControllerRef.current = new AbortController();
 
-        isProcessingRef.current = false;
+        inFlightRef.current = false;
         hasShownWidgetsRef.current = false;
-
         sentinelInViewRef.current = false;
-        pendingTriggerRef.current = false;
-        cooldownRef.current = false;
-        revealInFlightRef.current = false;
 
-        setHasUserScrolled(false);
-
-        const sorted = sortWidgets(widgets);
-        const categorized = categorizeWidgets(sorted);
+        const categorized = categorizeWidgets(widgets);
         categorizedCandidatesRef.current = categorized;
 
-        const queue = buildQueue(categorized);
-        queueLenRef.current = queue.length;
+        const queue = Object.entries(CATEGORY_MAPPING)
+            .map(([name, config]) => ({ name, ordering: config.ordering }))
+            .sort((a, b) => a.ordering - b.ordering)
+            .map((x) => x.name);
+
+        if ((categorized[FALLBACK_CATEGORY] || []).length > 0) {
+            queue.push(FALLBACK_CATEGORY);
+        }
+
+        const initial: Record<string, CategoryStatus> = {};
+        for (const name of queue) {
+            const candidates = categorized[name] || [];
+            initial[name] = {
+                status: candidates.length > 0 ? "pending" : "empty",
+                validWidgets: [],
+                validCount: 0,
+            };
+        }
 
         setCategoryQueue(queue);
         setVisibleCategoriesCount(Math.min(INITIAL_VISIBLE_CATEGORIES, queue.length));
-        setCategoriesStatus(initStatus(queue, categorized));
+        setCategoriesStatus(initial);
         setIsLoadingCategory(false);
     }, [widgetsKey]);
 
     const hasMore = visibleCategoriesCount < categoryQueue.length;
 
-    const isInitialBatchTerminal = useMemo(() => {
-        const count = Math.min(INITIAL_VISIBLE_CATEGORIES, categoryQueue.length);
-        if (count === 0) return false;
+    const { ref: loadMoreObserverRef } = useIntersectionObserver({
+        threshold: 0,
+        rootMargin: "200px 0px",
+        onChange: (isIntersecting) => {
+            sentinelInViewRef.current = isIntersecting;
+            if (!isIntersecting) return;
+            if (!hasMore) return;
+            if (inFlightRef.current) return;
 
-        for (let i = 0; i < count; i++) {
+            setVisibleCategoriesCount((prev) =>
+                prev < categoryQueue.length ? prev + 1 : prev
+            );
+        },
+    });
+
+    useEffect(() => {
+        if (inFlightRef.current) return;
+
+        let nextName: string | null = null;
+        const maxIndex = Math.min(visibleCategoriesCount, categoryQueue.length);
+        for (let i = 0; i < maxIndex; i++) {
             const name = categoryQueue[i];
             const st = categoriesStatus[name];
-            if (!st) return false;
-            if (!isTerminal(st.status)) return false;
+            if (st && st.status === "pending") {
+                nextName = name;
+                break;
+            }
         }
-
-        return true;
-    }, [categoryQueue, categoriesStatus]);
-
-    const canAutoLoadBySentinel = hasUserScrolled && isInitialBatchTerminal;
-
-    // one listener: arm first scroll + re-arm cooldown when user keeps scrolling near bottom
-    useEffect(() => {
-        const onScroll = () => {
-            if (!hasUserScrolled) setHasUserScrolled(true);
-
-            if (sentinelInViewRef.current) {
-                cooldownRef.current = false;
-            }
-        };
-
-        window.addEventListener("scroll", onScroll, { passive: true });
-        window.addEventListener("wheel", onScroll, { passive: true });
-        window.addEventListener("touchmove", onScroll, { passive: true });
-
-        return () => {
-            window.removeEventListener("scroll", onScroll);
-            window.removeEventListener("wheel", onScroll);
-            window.removeEventListener("touchmove", onScroll);
-        };
-    }, [hasUserScrolled]);
-
-    const patchCategory = useCallback(
-        (runId: number, name: string, patch: Partial<CategoryStatus>) => {
-            if (runId !== runIdRef.current) return;
-
-            setCategoriesStatus((prev) => {
-                const prevItem = prev[name];
-                if (!prevItem) return prev;
-                const nextItem: CategoryStatus = { ...prevItem, ...patch };
-                return { ...prev, [name]: nextItem };
-            });
-
-            if (!hasShownWidgetsRef.current && typeof patch.validCount === "number") {
-                if (patch.validCount > 0) {
-                    hasShownWidgetsRef.current = true;
-                    widgetsShowChanged();
-                }
-            }
-        },
-        []
-    );
-
-    const finalizeCategory = useCallback(
-        (runId: number, name: string, list: WidgetWithPrefetch[]) => {
-            patchCategory(runId, name, {
-                status: list.length > 0 ? "ready" : "empty",
-                validWidgets: list,
-                validCount: list.length,
-            });
-        },
-        [patchCategory]
-    );
-
-    const prefetchWidget = useCallback(async (runId: number, widget: IWidget) => {
-        if (runId !== runIdRef.current) return null;
-
-        // IMPORTANT: $prefetchMode НЕ должен скрывать виджет в финальном UI => всегда false.
-        // IMPORTANT: data не должен “протекать” в обычном режиме => data: undefined.
-
-        if (widget.type === "importedWidget") {
-            return toFinalWidget(widget);
-        }
-
-        const ds = getDataSource(widget);
-        if (!ds) return toFinalWidget(widget);
-
-        try {
-            const data = await loadRendererData(ds, abortControllerRef.current);
-            if (!validateBusinessData(data)) return null;
-
-            // есть prefetched data -> кладём data, но УБИРАЕМ dataSource (чтобы Renderer не дергал второй раз)
-            return toFinalWidget(widget, { data, dataSource: undefined });
-        } catch {
-            // сеть/парсинг не должны “убивать” категорию — обычный режим
-            return toFinalWidget(widget);
-        }
-    }, []);
-
-    const processCategory = useCallback(
-        async (runId: number, categoryName: string) => {
-            if (runId !== runIdRef.current) return;
-
-            const candidates = categorizedCandidatesRef.current[categoryName] || [];
-            if (candidates.length === 0) {
-                finalizeCategory(runId, categoryName, []);
-                return;
-            }
-
-            patchCategory(runId, categoryName, { status: "loading" });
-
-            const valid: WidgetWithPrefetch[] = [];
-
-            for (const w of candidates) {
-                if (runId !== runIdRef.current) return;
-
-                const item = await prefetchWidget(runId, w);
-                if (item) valid.push(item);
-            }
-
-            const finalList = sortWidgets(valid);
-            finalizeCategory(runId, categoryName, finalList);
-        },
-        [finalizeCategory, patchCategory, prefetchWidget]
-    );
-
-    // orchestrator: strictly one pending within visible window
-    useEffect(() => {
-        if (isProcessingRef.current) return;
-
-        const nextName = findNextPending(categoryQueue, categoriesStatus, visibleCategoriesCount);
         if (!nextName) return;
 
         const runId = runIdRef.current;
-
-        isProcessingRef.current = true;
+        inFlightRef.current = true;
         setIsLoadingCategory(true);
 
-        processCategory(runId, nextName).finally(() => {
+        (async () => {
+            const candidates = sortWidgets(categorizedCandidatesRef.current[nextName] || []);
+            if (candidates.length === 0) {
+                setCategoriesStatus((prev) => {
+                    const prevItem = prev[nextName];
+                    if (!prevItem) return prev;
+                    const nextItem: CategoryStatus = {
+                        ...prevItem,
+                        status: "empty",
+                        validWidgets: [],
+                        validCount: 0,
+                    };
+                    return { ...prev, [nextName]: nextItem };
+                });
+                return;
+            }
+
+            setCategoriesStatus((prev) => {
+                const prevItem = prev[nextName];
+                if (!prevItem) return prev;
+                const nextItem: CategoryStatus = { ...prevItem, status: "loading" };
+                return { ...prev, [nextName]: nextItem };
+            });
+
+            const valid: WidgetWithPrefetch[] = [];
+
+            for (const widget of candidates) {
+                if (runId !== runIdRef.current) return;
+
+                if (widget.type === "importedWidget") {
+                    valid.push(toFinalWidget(widget));
+                } else {
+                    const ds = getDataSource(widget);
+                    if (!ds) {
+                        valid.push(toFinalWidget(widget));
+                    } else {
+                        try {
+                            const data = await loadRendererData(ds, abortControllerRef.current);
+                            if (validateBusinessData(data)) {
+                                valid.push(toFinalWidget(widget, { data, dataSource: undefined }));
+                            }
+                        } catch {
+                            valid.push(toFinalWidget(widget));
+                        }
+                    }
+                }
+            }
+
+            const validCount = valid.length;
+            setCategoriesStatus((prev) => {
+                const prevItem = prev[nextName];
+                if (!prevItem) return prev;
+                const nextItem: CategoryStatus = {
+                    ...prevItem,
+                    status: validCount > 0 ? "ready" : "empty",
+                    validWidgets: valid,
+                    validCount,
+                };
+                return { ...prev, [nextName]: nextItem };
+            });
+
+            if (!hasShownWidgetsRef.current && validCount > 0) {
+                hasShownWidgetsRef.current = true;
+                widgetsShowChanged();
+            }
+        })().finally(() => {
             if (runId !== runIdRef.current) return;
-            isProcessingRef.current = false;
+            inFlightRef.current = false;
             setIsLoadingCategory(false);
-        });
-    }, [categoryQueue, categoriesStatus, visibleCategoriesCount, processCategory]);
 
-    const requestNextCategory = useCallback(() => {
-        if (revealInFlightRef.current) return;
-        if (!hasMore) return;
-
-        revealInFlightRef.current = true;
-
-        setVisibleCategoriesCount((prev) => {
-            const limit = queueLenRef.current;
-            const next = Math.min(prev + 1, limit);
-            if (next === prev) {
-                revealInFlightRef.current = false;
+            if (sentinelInViewRef.current) {
+                setVisibleCategoriesCount((prev) =>
+                    prev < categoryQueue.length ? prev + 1 : prev
+                );
             }
-            return next;
         });
-    }, [hasMore]);
-
-    useEffect(() => {
-        revealInFlightRef.current = false;
-    }, [visibleCategoriesCount]);
-
-    // anti-stuck: sentinel был в зоне во время загрузки -> после окончания грузим +1 (но не пачкой)
-    useEffect(() => {
-        if (!canAutoLoadBySentinel) return;
-        if (!hasMore) return;
-        if (isLoadingCategory) return;
-
-        if (sentinelInViewRef.current && pendingTriggerRef.current && !cooldownRef.current) {
-            pendingTriggerRef.current = false;
-            cooldownRef.current = true;
-            requestNextCategory();
-        }
-    }, [canAutoLoadBySentinel, hasMore, isLoadingCategory, requestNextCategory]);
-
-    // ref callback: гарантированно навешивает observer на актуальную ноду
-    const loadMoreObserverRef = useCallback(
-        (node: Element | null) => {
-            if (observerRef.current) {
-                observerRef.current.disconnect();
-                observerRef.current = null;
-            }
-
-            if (!node) return;
-
-            const obs = new IntersectionObserver(
-                (entries) => {
-                    const isIntersecting = Boolean(entries[0]?.isIntersecting);
-                    sentinelInViewRef.current = isIntersecting;
-
-                    if (!isIntersecting) {
-                        pendingTriggerRef.current = false;
-                        cooldownRef.current = false;
-                        return;
-                    }
-
-                    if (!canAutoLoadBySentinel) return;
-                    if (!hasMore) return;
-
-                    if (cooldownRef.current) return;
-
-                    if (isLoadingCategory || isProcessingRef.current) {
-                        pendingTriggerRef.current = true;
-                        return;
-                    }
-
-                    cooldownRef.current = true;
-                    requestNextCategory();
-                },
-                { threshold: 0, rootMargin: "200px 0px" }
-            );
-
-            obs.observe(node);
-            observerRef.current = obs;
-        },
-        [canAutoLoadBySentinel, hasMore, isLoadingCategory, requestNextCategory]
-    );
+    }, [categoryQueue, categoriesStatus, visibleCategoriesCount]);
 
     useEffect(() => {
         return () => {
             abortControllerRef.current.abort();
-            if (observerRef.current) observerRef.current.disconnect();
         };
     }, []);
 

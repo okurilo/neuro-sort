@@ -3,16 +3,16 @@ import { useStore } from "@nanostores/react";
 import { Text } from "@pulse/ui/components/Text";
 
 import { WidgetsContainerStyled, WrapperGridStyled } from "./styled";
-import { useBatchAnalytics } from "../hooks/useBatchAnalytics";
-import { useContainerHeight } from "../hooks/useContainerHeight";
-import { useGridScale } from "../hooks/useGridScale";
+import { useBatchAnalytics } from "./hooks/useBatchAnalytics";
+import { useContainerHeight } from "./hooks/useContainerHeight";
+import { useGridScale } from "./hooks/useGridScale";
 import { $widgets } from "../stores/widgets";
 import { $widgetsShow, resetWidgetsShow } from "../stores/widgets-show";
 
 import {
     useWidgetsWithPrefetch,
     WidgetWithPrefetch,
-} from "../hooks/useWidgetsWithPrefetch";
+} from "./hooks/useWidgetsWithPrefetch";
 
 const widgetModulePromise = import("./Widget");
 const LazyWidget = lazy(() =>

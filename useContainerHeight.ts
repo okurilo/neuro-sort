@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEventListener, useResizeObserver } from "usehooks-ts";
 
 // @todo КОСТЫЛЬ! ВРЕМЕННОЕ РЕШЕНИЕ! NEUROUI-629
 export const useContainerHeight = ({
@@ -35,31 +36,14 @@ export const useContainerHeight = ({
     }, [...updateHeightOn]);
 
     // Пересчет при ресайзе окна (как было)
+    useEventListener("resize", measure);
+
+    // Пересчет при любом изменении размеров DOM-контента внутри грида
+    const { height: observedHeight } = useResizeObserver({ ref: gridRef });
     useEffect(() => {
-        window.addEventListener("resize", measure);
-        return () => window.removeEventListener("resize", measure);
-    }, [measure]);
-
-    // НОВОЕ: пересчет при любом изменении размеров DOM-контента внутри грида
-    useEffect(() => {
-        const node = gridRef.current;
-        if (!node) return;
-
-        if (typeof ResizeObserver === "undefined") {
-            measure();
-            return;
-        }
-
-        const ro = new ResizeObserver(() => {
-            measure();
-        });
-
-        ro.observe(node);
-
-        return () => {
-            ro.disconnect();
-        };
-    }, [gridRef, measure]);
+        if (typeof observedHeight !== "number") return;
+        measure();
+    }, [observedHeight, measure]);
 
     useEffect(() => {
         return () => {

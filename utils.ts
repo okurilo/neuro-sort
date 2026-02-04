@@ -8,32 +8,17 @@ import type { IWidget } from "../../types";
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null;
 
-const getRecord = (value: unknown): Record<string, unknown> | null =>
-    isRecord(value) ? value : null;
-
-const buildUrl = (
-    url: NonNullable<RootProps["dataSource"]>["url"],
-    options: NonNullable<RootProps["dataSource"]>["options"]
-) => {
-    if (options) {
-        const { pathVariables, requestParams } = options;
-
-        const template = new URITemplate(url);
-        const uri = new URI(template.expand(pathVariables ?? {}));
-
-        return uri.query(requestParams ?? {}).valueOf();
-    }
-
-    return url;
-};
-
 export const loadRendererData = async (
     dataSource: NonNullable<RootProps["dataSource"]>,
     abortController: AbortController
 ) => {
     const { method, options = {}, url: uri } = dataSource;
 
-    const url = buildUrl(uri, options);
+    const { pathVariables, requestParams } = options;
+    const template = new URITemplate(uri);
+    const url = new URI(template.expand(pathVariables ?? {}))
+        .query(requestParams ?? {})
+        .valueOf();
     const response = await httpClient(url, {
         body: options.requestBody,
         headers: options.headers,
@@ -46,11 +31,11 @@ export const loadRendererData = async (
 };
 
 export const migrateOnMountToDataSource = (body: unknown) => {
-    const bodyObj = getRecord(body);
+    const bodyObj = isRecord(body) ? body : null;
     if (!bodyObj) return body;
 
-    const triggers = getRecord(bodyObj.triggers);
-    const onMount = getRecord(triggers?.onMount);
+    const triggers = isRecord(bodyObj.triggers) ? bodyObj.triggers : null;
+    const onMount = isRecord(triggers?.onMount) ? triggers?.onMount : null;
     const onMountAction = onMount?.action;
 
     if (!Array.isArray(onMountAction)) {
@@ -200,41 +185,33 @@ export const validateBusinessData = (data: unknown): boolean => {
     return true;
 };
 
-const getRendererDataSource = (
-    widget: IWidget
-): NonNullable<RootProps["dataSource"]> | null => {
-    if (widget.type !== "renderer") return null;
-
-    const body = getRecord(widget.body);
-    if (body?.dataSource) {
-        return body.dataSource as NonNullable<RootProps["dataSource"]>;
-    }
-
-    const migratedBody = migrateOnMountToDataSource(widget.body);
-    const migratedRecord = getRecord(migratedBody);
-    if (migratedRecord?.dataSource) {
-        return migratedRecord.dataSource as NonNullable<RootProps["dataSource"]>;
-    }
-
-    return null;
-};
-
-const getImportedDataSource = (
-    widget: IWidget
-): NonNullable<RootProps["dataSource"]> | null => {
-    if (widget.type !== "importedWidget") return null;
-
-    const record = getRecord(widget as unknown);
-    const dataSource = record?.dataSource;
-    return dataSource
-        ? (dataSource as NonNullable<RootProps["dataSource"]>)
-        : null;
-};
-
 export const getDataSource = (
     widget: IWidget
 ): NonNullable<RootProps["dataSource"]> | null => {
-    return getRendererDataSource(widget) ?? getImportedDataSource(widget);
+    if (widget.type === "renderer") {
+        const body = isRecord(widget.body) ? widget.body : null;
+        if (body?.dataSource) {
+            return body.dataSource as NonNullable<RootProps["dataSource"]>;
+        }
+
+        const migratedBody = migrateOnMountToDataSource(widget.body);
+        const migratedRecord = isRecord(migratedBody) ? migratedBody : null;
+        if (migratedRecord?.dataSource) {
+            return migratedRecord.dataSource as NonNullable<RootProps["dataSource"]>;
+        }
+
+        return null;
+    }
+
+    if (widget.type === "importedWidget") {
+        const record = isRecord(widget as unknown) ? (widget as Record<string, unknown>) : null;
+        const dataSource = record?.dataSource;
+        return dataSource
+            ? (dataSource as NonNullable<RootProps["dataSource"]>)
+            : null;
+    }
+
+    return null;
 };
 
 export const categorizeWidgets = (widgets: IWidget[]): Record<string, IWidget[]> => {

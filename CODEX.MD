@@ -12,6 +12,7 @@
 - `$prefetchMode` — только визуальный режим, в финальных валидных виджетах всегда `false`.
 - Для `renderer`: при успешном prefetch можно положить `data`, но убрать `dataSource`.
 - Для `importedWidget`: всегда `data: undefined`, `$prefetchMode: false`.
+- В проекте допускается использование библиотеки `usehooks-ts` для замены самописных хуков на стандартные при наличии реальной пользы.
 
 ## Ошибочные подходы (не повторять)
 - Возврат к логике, где `React.lazy`/`Suspense` и измерение высоты дают нулевую высоту и приводят к наложению контента.
@@ -19,5 +20,9 @@
 
 ## Последние изменения
 - Рефакторинг `useWidgetsWithPrefetch.ts`: объединена инициализация, добавлены локальные helpers, упрощены `patchCategory`/`finalizeCategory`, `prefetchWidget`.
+- Упрощена модель `useWidgetsWithPrefetch.ts`: оставлены `inFlightRef`, `pendingTriggerRef`, `sentinelInViewRef`, убраны `cooldown`/`hasUserScrolled`/`reveal`‑механизмы.
 - Рефакторинг `utils.ts`: добавлены `isRecord`/`getRecord`, вынесен `CODE_TO_CATEGORY`, упрощён `getDataSource`.
 - Рефакторинг `Widgets.tsx`: добавлен `canRenderCategory`, выделен `renderCategory`, упрощён ref для sentinel.
+- `useWidgetsWithPrefetch.ts`: сортировка только внутри категории, удалён `buildWidgetsKey`, подключён `useIntersectionObserver` из `usehooks-ts`, упрощён оркестратор и обработка sentinel.
+- `utils.ts`: схлопнут `getDataSource`, убран `getRecord`, инлайн `buildUrl`.
+- `useContainerHeight.ts`: `ResizeObserver` и `resize` listener заменены на `useResizeObserver` и `useEventListener` из `usehooks-ts`.
