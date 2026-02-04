@@ -111,7 +111,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const runIdRef = useRef(0);
     const abortControllerRef = useRef<AbortController>(new AbortController());
     const inFlightRef = useRef(false);
-    const needNextRef = useRef(false);
+    const armedRef = useRef(true);
     const hasShownWidgetsRef = useRef(false);
     const categorizedCandidatesRef = useRef<Record<string, IWidget[]>>({});
     const sentinelInViewRef = useRef(false);
@@ -129,7 +129,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         abortControllerRef.current = new AbortController();
 
         inFlightRef.current = false;
-        needNextRef.current = false;
+        armedRef.current = true;
         hasShownWidgetsRef.current = false;
         sentinelInViewRef.current = false;
 
@@ -183,41 +183,31 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
     useEffect(() => {
         sentinelInViewRef.current = isIntersecting;
-        if (!isIntersecting && needNextRef.current) {
-            debugLog("need-next-reset", { reason: "observer-out" });
-            needNextRef.current = false;
+        if (!isIntersecting && !armedRef.current) {
+            armedRef.current = true;
+            debugLog("armed-reset", { reason: "observer-out" });
         }
         debugLog("observer", {
             isIntersecting,
             hasMore,
             visibleCategoriesCount,
             queueLength: categoryQueue.length,
-            needNext: needNextRef.current,
+            armed: armedRef.current,
         });
     }, [isIntersecting, hasMore, visibleCategoriesCount, categoryQueue.length]);
 
     useEffect(() => {
         if (!isIntersecting) return;
         if (!hasMore) return;
-        if (inFlightRef.current) {
-            needNextRef.current = true;
-            debugLog("need-next-set", { reason: "observer", inFlight: true });
-            return;
-        }
+        if (inFlightRef.current) return;
+        if (!armedRef.current) return;
 
-        needNextRef.current = true;
         setVisibleCategoriesCount((prev) => {
             const next = prev < categoryQueue.length ? prev + 1 : prev;
-            debugLog("advance-by-observer", {
-                prev,
-                next,
-                queueLength: categoryQueue.length,
-                needNext: needNextRef.current,
-            });
+            debugLog("advance-by-observer", { prev, next, queueLength: categoryQueue.length });
             return next;
         });
-        debugLog("need-next-reset", { reason: "observer-advance" });
-        needNextRef.current = false;
+        armedRef.current = false;
     }, [isIntersecting, hasMore, categoryQueue.length]);
 
     useEffect(() => {
@@ -327,38 +317,12 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 inFlightRef.current = false;
                 setIsLoadingCategory(false);
 
-                if (!hasMore) {
-                    if (needNextRef.current) {
-                        debugLog("need-next-reset", { reason: "no-more" });
-                    }
-                    needNextRef.current = false;
-                    return;
-                }
-
-                if (needNextRef.current) {
-                    setVisibleCategoriesCount((prev) => {
-                        const next = prev < categoryQueue.length ? prev + 1 : prev;
-                        debugLog("auto-advance", {
-                            runId,
-                            needNext: needNextRef.current,
-                            sentinelInView: sentinelInViewRef.current,
-                            prev,
-                            next,
-                            queueLength: categoryQueue.length,
-                        });
-                        return next;
-                    });
-                    if (needNextRef.current) {
-                        debugLog("need-next-reset", { reason: "auto-advance" });
-                    }
-                    needNextRef.current = false;
-                } else {
-                    debugLog("no-auto-advance", {
-                        runId,
-                        sentinelInView: sentinelInViewRef.current,
-                        visibleCategoriesCount,
-                    });
-                }
+                if (!hasMore) return;
+                debugLog("no-auto-advance", {
+                    runId,
+                    sentinelInView: sentinelInViewRef.current,
+                    visibleCategoriesCount,
+                });
             });
     }, [categoryQueue, categoriesStatus, visibleCategoriesCount, hasMore]);
 
