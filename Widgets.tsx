@@ -4,7 +4,6 @@ import { Text } from "@pulse/ui/components/Text";
 
 import { WidgetsContainerStyled, WrapperGridStyled } from "./styled";
 import { useBatchAnalytics } from "./hooks/useBatchAnalytics";
-import { useContainerHeight } from "./hooks/useContainerHeight";
 import { useGridScale } from "./hooks/useGridScale";
 import { $widgets } from "../stores/widgets";
 import { $widgetsShow, resetWidgetsShow } from "../stores/widgets-show";
@@ -44,13 +43,8 @@ const Grid: FC<{
 
     useGridScale({ gridRef });
 
-    const { containerHeight } = useContainerHeight({
-        gridRef,
-        updateHeightOn: [value.length],
-    });
-
     return (
-        <div style={{ height: containerHeight }}>
+        <div>
             <WrapperGridStyled ref={gridRef}>
                 {value.map((widget, index) => {
                     return (

@@ -154,20 +154,24 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
     const hasMore = visibleCategoriesCount < categoryQueue.length;
 
-    const { ref: loadMoreObserverRef } = useIntersectionObserver({
+    const { ref: loadMoreObserverRef, isIntersecting } = useIntersectionObserver({
         threshold: 0,
         rootMargin: "200px 0px",
-        onChange: (isIntersecting) => {
-            sentinelInViewRef.current = isIntersecting;
-            if (!isIntersecting) return;
-            if (!hasMore) return;
-            if (inFlightRef.current) return;
-
-            setVisibleCategoriesCount((prev) =>
-                prev < categoryQueue.length ? prev + 1 : prev
-            );
-        },
     });
+
+    useEffect(() => {
+        sentinelInViewRef.current = isIntersecting;
+    }, [isIntersecting]);
+
+    useEffect(() => {
+        if (!isIntersecting) return;
+        if (!hasMore) return;
+        if (inFlightRef.current) return;
+
+        setVisibleCategoriesCount((prev) =>
+            prev < categoryQueue.length ? prev + 1 : prev
+        );
+    }, [isIntersecting, hasMore, categoryQueue.length]);
 
     useEffect(() => {
         if (inFlightRef.current) return;

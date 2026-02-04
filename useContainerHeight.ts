@@ -9,7 +9,7 @@ export const useContainerHeight = ({
     gridRef: React.RefObject<HTMLDivElement>;
     updateHeightOn: Array<unknown>;
 }) => {
-    const [containerHeight, setContainerHeight] = useState(0);
+    const [containerHeight, setContainerHeight] = useState<number | null>(null);
 
     const rafRef = useRef<number | null>(null);
 
@@ -24,7 +24,11 @@ export const useContainerHeight = ({
         rafRef.current = requestAnimationFrame(() => {
             const next = node.getBoundingClientRect().height;
 
-            setContainerHeight((prev) => (Math.abs(prev - next) > 0.5 ? next : prev));
+            setContainerHeight((prev) => {
+                if (next <= 0.5 && prev !== null) return prev;
+                if (prev === null || Math.abs(prev - next) > 0.5) return next;
+                return prev;
+            });
             rafRef.current = null;
         });
     }, [gridRef]);

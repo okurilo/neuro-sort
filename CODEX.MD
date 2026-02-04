@@ -27,3 +27,5 @@
 - `utils.ts`: схлопнут `getDataSource`, убран `getRecord`, инлайн `buildUrl`.
 - `useContainerHeight.ts`: `ResizeObserver` и `resize` listener заменены на `useResizeObserver` и `useEventListener` из `usehooks-ts`.
 - Исправлена автоподгрузка: `useIntersectionObserver` ref передаётся напрямую, упрощён пайплайн загрузки категории, уменьшено количество `setCategoriesStatus`.
+- `useContainerHeight.ts`: предотвращено схлопывание высоты (0px) — сохраняем последнее ненулевое значение, в Grid высота не задаётся при 0.
+- `Widgets.tsx`: убрана фиксация `height` и использование `useContainerHeight` (переход на естественную высоту по контенту).
