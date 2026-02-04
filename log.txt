@@ -1,19 +1,23 @@
+LOG 1: В DOM 3 категории на страрте!:
 [PREFETCH] init {runId: 1, widgetsKey: '', queueLength: 9, initialVisibleCount: 2, statusMap: {…}}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: false, hasMore: false, visibleCategoriesCount: 2, queueLength: 0, needNext: false}
 Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 2, hasMore: false, isLoadingCategory: false, renderedCategories: Array(0)}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: false, hasMore: true, visibleCategoriesCount: 2, queueLength: 9, needNext: false}
 Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 2, hasMore: true, isLoadingCategory: false, renderedCategories: Array(2)}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 2, queueLength: 9, needNext: false}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] advance-by-observer {prev: 2, next: 3, queueLength: 9}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] need-next-reset {reason: 'observer-advance'}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] advance-by-observer {prev: 2, next: 3, queueLength: 9, needNext: false}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 3, queueLength: 9, needNext: false}
 Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 3, hasMore: true, isLoadingCategory: false, renderedCategories: Array(3)}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] init {runId: 2, widgetsKey: 'absences:vacations|absences:working-days|app-healt…i-posts:posts|widget:pulseAI|widget:survey-pulse2', queueLength: 10, initialVisibleCount: 2, statusMap: {…}}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 2, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] need-next-reset {reason: 'observer-advance'}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'важно', visibleCategoriesCount: 2, inFlight: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'app-perftracker:neuro-tasks', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] finish-category {runId: 2, nextName: 'важно', validCount: 1, status: 'ready'}
 Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 2, hasMore: true, isLoadingCategory: false, renderedCategories: Array(2)}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] advance-by-observer {prev: 2, next: 3, queueLength: 10}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] advance-by-observer {prev: 2, next: 3, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] no-auto-advance {runId: 2, sentinelInView: true, visibleCategoriesCount: 2}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 3, queueLength: 10, needNext: false}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'для меня', visibleCategoriesCount: 3, inFlight: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'absences:vacations', type: undefined, dataSource: false, valid: true}
@@ -21,33 +25,35 @@ useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'absences:working
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'app-health-api:health', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] finish-category {runId: 2, nextName: 'для меня', validCount: 3, status: 'ready'}
 Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 3, hasMore: true, isLoadingCategory: true, renderedCategories: Array(3)}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] auto-advance {runId: 2, needNext: false, sentinelInView: true, prev: 3, next: 4, …}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 4, queueLength: 10, needNext: false}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'моя команда', visibleCategoriesCount: 4, inFlight: true}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] no-auto-advance {runId: 2, sentinelInView: true, visibleCategoriesCount: 3}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'моя команда', visibleCategoriesCount: 3, inFlight: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'app-web-cloud-analytics:macroWidget', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'spine-ui-people:people-v2', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'spine-ui-dates:events', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] finish-category {runId: 2, nextName: 'моя команда', validCount: 3, status: 'ready'}
-Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 4, hasMore: true, isLoadingCategory: true, renderedCategories: Array(4)}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] auto-advance {runId: 2, needNext: false, sentinelInView: true, prev: 4, next: 5, …}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 5, queueLength: 10, needNext: false}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'развитие', visibleCategoriesCount: 5, inFlight: true}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] no-auto-advance {runId: 2, sentinelInView: true, visibleCategoriesCount: 3}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: false, hasMore: true, visibleCategoriesCount: 3, queueLength: 10, needNext: false}
+Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 3, hasMore: true, isLoadingCategory: false, renderedCategories: Array(3)}
+
+LOG 2: Загрузка залипла после двух скроллов подряд:
+useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 3, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] need-next-reset {reason: 'observer-advance'}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] advance-by-observer {prev: 3, next: 4, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 4, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'развитие', visibleCategoriesCount: 4, inFlight: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'spine-feed:recommendation-ai-native', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'app-web-growth:events-poster-all-events-ai-native', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'spine-feed:continue-ai-native', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] finish-category {runId: 2, nextName: 'развитие', validCount: 3, status: 'ready'}
-Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 5, hasMore: true, isLoadingCategory: true, renderedCategories: Array(5)}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] auto-advance {runId: 2, needNext: false, sentinelInView: true, prev: 5, next: 6, …}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: false, hasMore: true, visibleCategoriesCount: 6, queueLength: 10, needNext: false}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'эффективность', visibleCategoriesCount: 6, inFlight: true}
+Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 4, hasMore: true, isLoadingCategory: false, renderedCategories: Array(4)}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] no-auto-advance {runId: 2, sentinelInView: true, visibleCategoriesCount: 4}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: false, hasMore: true, visibleCategoriesCount: 4, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 4, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] need-next-reset {reason: 'observer-advance'}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] advance-by-observer {prev: 4, next: 5, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 5, queueLength: 10, needNext: false}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] start-category {runId: 2, nextName: 'эффективность', visibleCategoriesCount: 5, inFlight: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] prefetch-widget {code: 'smartcalendar:maindash', type: undefined, dataSource: false, valid: true}
 useWidgetsWithPrefetch.ts:18 [PREFETCH] finish-category {runId: 2, nextName: 'эффективность', validCount: 1, status: 'ready'}
-Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 6, hasMore: true, isLoadingCategory: true, renderedCategories: Array(6)}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] no-auto-advance {runId: 2, sentinelInView: false, visibleCategoriesCount: 6}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] auto-advance {runId: 2, needNext: false, sentinelInView: false, prev: 6, next: 7, …}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: false, hasMore: true, visibleCategoriesCount: 7, queueLength: 10, needNext: false}
-Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 7, hasMore: true, isLoadingCategory: false, renderedCategories: Array(7)}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 7, queueLength: 10, needNext: false}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] advance-by-observer {prev: 7, next: 8, queueLength: 10}
-useWidgetsWithPrefetch.ts:18 [PREFETCH] observer {isIntersecting: true, hasMore: true, visibleCategoriesCount: 8, queueLength: 10, needNext: false}
-Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 8, hasMore: true, isLoadingCategory: false, renderedCategories: Array(8)}
+Widgets.tsx:140 [WIDGETS] {visibleCategoriesCount: 5, hasMore: true, isLoadingCategory: false, renderedCategories: Array(5)}
+useWidgetsWithPrefetch.ts:18 [PREFETCH] no-auto-advance {runId: 2, sentinelInView: true, visibleCategoriesCount: 5}
