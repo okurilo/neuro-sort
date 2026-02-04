@@ -5,8 +5,96 @@ import URITemplate from "urijs/src/URITemplate";
 
 import type { IWidget } from "../../types";
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null;
+const buildUrl = (
+    url: NonNullable<RootProps["dataSource"]>["url"],
+    options: NonNullable<RootProps["dataSource"]>["options"]
+) => {
+    if (options) {
+        const { pathVariables, requestParams } = options;
+
+        const template = new URITemplate(url);
+        const uri = new URI(template.expand(pathVariables ?? {}));
+
+        return uri.query(requestParams ?? {}).valueOf();
+    }
+
+    return url;
+};
+
+export const loadRendererData = async (
+    dataSource: NonNullable<RootProps["dataSource"]>,
+    abortController: AbortController
+) => {
+    const { method, options = {}, url: uri } = dataSource;
+
+    const url = buildUrl(uri, options);
+    const response = await httpClient(url, {
+        body: options.requestBody,
+        headers: options.headers,
+        method: method ?? "get",
+        signal: abortController.signal,
+    });
+
+    const data = await response.json();
+    return data;
+};
+
+export const migrateOnMountToDataSource = (body: unknown) => {
+    if (typeof body !== "object" || body === null) {
+        return body;
+    }
+
+    const bodyObj = body as Record<string, unknown>;
+    const triggers = bodyObj.triggers as Record<string, unknown> | undefined;
+    const onMount = triggers?.onMount as Record<string, unknown> | undefined;
+    const onMountAction = onMount?.action;
+
+    if (!Array.isArray(onMountAction)) {
+        return body;
+    }
+
+    const requestIndex = onMountAction.findIndex((action: unknown) => {
+        if (typeof action !== "object" || action === null) return false;
+        const actionObj = action as Record<string, unknown>;
+        return typeof actionObj.type === "string" && actionObj.type.startsWith("http.");
+    });
+
+    if (requestIndex === -1) {
+        return body;
+    }
+
+    const requestAction = onMountAction[requestIndex] as Record<string, unknown>;
+    const actionType = requestAction.type as string;
+    const method = actionType.split(".")[1];
+
+    const dataSource = {
+        url: requestAction.url as string,
+        method,
+        options: {
+            requestBody: requestAction.body,
+            headers: requestAction.headers,
+            requestParams: requestAction.params,
+            pathVariables: requestAction.pathVariables,
+        },
+    };
+
+    onMountAction.splice(requestIndex, 1);
+
+    if (onMountAction.length === 0) {
+        delete (onMount as Record<string, unknown>).action;
+        if (Object.keys(onMount as object).length === 0) {
+            delete (triggers as Record<string, unknown>).onMount;
+        }
+        if (Object.keys(triggers as object).length === 0) {
+            delete (bodyObj as Record<string, unknown>).triggers;
+        }
+    }
+
+    return {
+        ...bodyObj,
+        dataSource,
+    };
+};
 
 export interface CategoryConfig {
     codes: string[];
@@ -93,113 +181,6 @@ export const CATEGORY_MAPPING: Record<string, CategoryConfig> = {
 
 export const FALLBACK_CATEGORY = "разное";
 
-const CODE_TO_CATEGORY: Record<string, string> = Object.entries(CATEGORY_MAPPING).reduce(
-    (acc, [categoryName, config]) => {
-        for (const code of config.codes) {
-            acc[code] = categoryName;
-        }
-        return acc;
-    },
-    {} as Record<string, string>
-);
-
-// --- URL / HTTP ---
-
-const buildUrl = (
-    url: NonNullable<RootProps["dataSource"]>["url"],
-    options: NonNullable<RootProps["dataSource"]>["options"]
-) => {
-    if (options) {
-        const { pathVariables, requestParams } = options;
-
-        const template = new URITemplate(url);
-        const uri = new URI(template.expand(pathVariables ?? {}));
-
-        return uri.query(requestParams ?? {}).valueOf();
-    }
-
-    return url;
-};
-
-export const loadRendererData = async (
-    dataSource: NonNullable<RootProps["dataSource"]>,
-    abortController: AbortController
-) => {
-    const { method, options = {}, url: uri } = dataSource;
-
-    const url = buildUrl(uri, options);
-    const response = await httpClient(url, {
-        body: options.requestBody,
-        headers: options.headers,
-        method: method ?? "get",
-        signal: abortController.signal,
-    });
-
-    const data = await response.json();
-    return data;
-};
-
-// --- migrate dataSource ---
-
-export const migrateOnMountToDataSource = (body: unknown) => {
-    if (!isRecord(body)) {
-        return body;
-    }
-
-    const bodyObj = body as Record<string, unknown>;
-    const triggers = bodyObj.triggers as Record<string, unknown> | undefined;
-    const onMount = triggers?.onMount as Record<string, unknown> | undefined;
-    const onMountAction = onMount?.action;
-
-    if (!Array.isArray(onMountAction)) {
-        return body;
-    }
-
-    const requestIndex = onMountAction.findIndex((action: unknown) => {
-        if (!isRecord(action)) return false;
-        const actionObj = action as Record<string, unknown>;
-        return typeof actionObj.type === "string" && actionObj.type.startsWith("http.");
-    });
-
-    if (requestIndex === -1) {
-        return body;
-    }
-
-    const requestAction = onMountAction[requestIndex] as Record<string, unknown>;
-    const actionType = requestAction.type as string;
-    const method = actionType.split(".")[1];
-
-    const dataSource: NonNullable<RootProps["dataSource"]> = {
-        url: requestAction.url as string,
-        method,
-        options: {
-            requestBody: requestAction.body,
-            headers: requestAction.headers,
-            requestParams: requestAction.params,
-            pathVariables: requestAction.pathVariables,
-        },
-    };
-
-    onMountAction.splice(requestIndex, 1);
-
-    if (onMountAction.length === 0) {
-        delete (onMount as Record<string, unknown>).action;
-        if (Object.keys(onMount as object).length === 0) {
-            delete (triggers as Record<string, unknown>).onMount;
-        }
-        if (Object.keys(triggers as object).length === 0) {
-            delete (bodyObj as Record<string, unknown>).triggers;
-        }
-    }
-
-    return {
-        ...bodyObj,
-        dataSource,
-    };
-};
-
-// --- data validation / accessors ---
-
 export const validateBusinessData = (data: unknown): boolean => {
     if (data === null || data === undefined) return false;
 
@@ -211,43 +192,32 @@ export const validateBusinessData = (data: unknown): boolean => {
     return true;
 };
 
-type WidgetWithTopLevelDataSource = IWidget & {
-    dataSource?: NonNullable<RootProps["dataSource"]>;
-    body?: unknown;
-};
-
-/**
- * Единая точка извлечения dataSource:
- * 1) widget.dataSource (реальный кейс у тебя)
- * 2) widget.body.dataSource (если вдруг схема так приходит)
- * 3) renderer: migrateOnMountToDataSource(widget.body) -> dataSource
- */
 export const getDataSource = (
     widget: IWidget
 ): NonNullable<RootProps["dataSource"]> | null => {
-    const w = widget as WidgetWithTopLevelDataSource;
-
-    if (w.dataSource) {
-        return w.dataSource;
-    }
-
-    if (isRecord(w.body)) {
-        const bodyObj = w.body as Record<string, unknown>;
-        const ds = bodyObj.dataSource as unknown;
-        if (ds) {
-            return ds as NonNullable<RootProps["dataSource"]>;
-        }
-    }
-
     if (widget.type === "renderer") {
-        const migratedBody = migrateOnMountToDataSource(w.body);
-        if (isRecord(migratedBody)) {
-            const migratedObj = migratedBody as Record<string, unknown>;
-            const ds = migratedObj.dataSource as unknown;
-            if (ds) {
-                return ds as NonNullable<RootProps["dataSource"]>;
-            }
+        const body = widget.body as unknown as { dataSource?: unknown; triggers?: unknown };
+
+        if (body?.dataSource) {
+            return body.dataSource as NonNullable<RootProps["dataSource"]>;
         }
+
+        const migratedBody = migrateOnMountToDataSource(widget.body);
+        const migratedTyped = migratedBody as { dataSource?: unknown };
+
+        if (migratedTyped?.dataSource) {
+            return migratedTyped.dataSource as NonNullable<RootProps["dataSource"]>;
+        }
+
+        return null;
+    }
+
+    if (widget.type === "importedWidget") {
+        const importedWidget = widget as unknown as { dataSource?: unknown };
+        if (importedWidget.dataSource) {
+            return importedWidget.dataSource as NonNullable<RootProps["dataSource"]>;
+        }
+        return null;
     }
 
     return null;
@@ -255,10 +225,18 @@ export const getDataSource = (
 
 export const categorizeWidgets = (widgets: IWidget[]): Record<string, IWidget[]> => {
     const result: Record<string, IWidget[]> = {};
+    const codeToCategory: Record<string, string> = {};
+
+    for (const [categoryName, config] of Object.entries(CATEGORY_MAPPING)) {
+        for (const code of config.codes) {
+            codeToCategory[code] = categoryName;
+        }
+    }
+
     const fallback: IWidget[] = [];
 
     for (const widget of widgets) {
-        const categoryName = CODE_TO_CATEGORY[widget.code];
+        const categoryName = codeToCategory[widget.code];
         if (categoryName) {
             if (!result[categoryName]) result[categoryName] = [];
             result[categoryName].push(widget);

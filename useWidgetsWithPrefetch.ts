@@ -85,12 +85,6 @@ const sortWidgets = <T extends { availableSizes: unknown }>(widgets: T[]): T[] =
     return result;
 };
 
-const computeWidgetsKey = (widgets: IWidget[]) => {
-    const parts = widgets.map((w) => `${String(w.id)}:${String(w.code)}`);
-    parts.sort();
-    return parts.join("|");
-};
-
 const buildCategoryQueue = (categorizedCandidates: Record<string, IWidget[]>) => {
     const base = Object.entries(CATEGORY_MAPPING)
         .map(([name, config]) => ({ name, ordering: config.ordering }))
@@ -102,22 +96,6 @@ const buildCategoryQueue = (categorizedCandidates: Record<string, IWidget[]>) =>
     }
 
     return base;
-};
-
-const initCategoryStatus = (
-    queue: string[],
-    categorized: Record<string, IWidget[]>
-): Record<string, CategoryStatus> => {
-    const initial: Record<string, CategoryStatus> = {};
-    for (const name of queue) {
-        const candidates = categorized[name] || [];
-        initial[name] = {
-            status: candidates.length > 0 ? "pending" : "empty",
-            validWidgets: [],
-            validCount: 0,
-        };
-    }
-    return initial;
 };
 
 const isTerminal = (s: CategoryLoadStatus) => s === "ready" || s === "empty";
@@ -160,7 +138,12 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const cooldownRef = useRef(false); // “уже догрузили 1 шаг, ждём следующего скролла”
     const revealInFlightRef = useRef(false);
 
-    const widgetsKey = useMemo(() => computeWidgetsKey(widgets), [widgets]);
+    // stable key = реальная смена набора
+    const widgetsKey = useMemo(() => {
+        const parts = widgets.map((w) => `${String(w.id)}:${String(w.code)}`);
+        parts.sort();
+        return parts.join("|");
+    }, [widgets]);
 
     // compute candidates/queue on widgets change
     useEffect(() => {
@@ -192,9 +175,21 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
         const queue = buildCategoryQueue(categorizedCandidatesRef.current);
         queueLenRef.current = queue.length;
+
         setCategoryQueue(queue);
         setVisibleCategoriesCount(Math.min(INITIAL_VISIBLE_CATEGORIES, queue.length));
-        setCategoriesStatus(initCategoryStatus(queue, categorizedCandidatesRef.current));
+
+        const initial: Record<string, CategoryStatus> = {};
+        for (const name of queue) {
+            const candidates = categorizedCandidatesRef.current[name] || [];
+            initial[name] = {
+                status: candidates.length > 0 ? "pending" : "empty",
+                validWidgets: [],
+                validCount: 0,
+            };
+        }
+
+        setCategoriesStatus(initial);
         setIsLoadingCategory(false);
     }, [widgetsKey]);
 

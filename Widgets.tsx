@@ -1,59 +1,136 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { FC, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
+import { Text } from "@pulse/ui/components/Text";
+
 import { WidgetsContainerStyled, WrapperGridStyled } from "./styled";
-import { useInfiniteSortedWidgets } from "../hooks/useSortWidgets";
 import { useBatchAnalytics } from "../hooks/useBatchAnalytics";
 import { useContainerHeight } from "../hooks/useContainerHeight";
 import { useGridScale } from "../hooks/useGridScale";
 import { $widgets } from "../stores/widgets";
 import { $widgetsShow, resetWidgetsShow } from "../stores/widgets-show";
 
+import {
+    useWidgetsWithPrefetch,
+    WidgetWithPrefetch,
+} from "../hooks/useWidgetsWithPrefetch";
+
+const widgetModulePromise = import("./Widget");
 const LazyWidget = lazy(() =>
-    import("./Widget").then(({ Widget }) => ({ default: Widget }))
+    widgetModulePromise.then(({ Widget }) => ({ default: Widget }))
 );
+
+const SingleCategoryLoader: FC = () => {
+    return (
+        <div style={{ padding: "16px", textAlign: "center" }}>
+            <Text variant="bodyMRegular">Загрузка…</Text>
+        </div>
+    );
+};
+
+const Grid: FC<{
+    value: WidgetWithPrefetch[];
+    sendAnalyticsBatch: (events: unknown[]) => void;
+}> = ({ value, sendAnalyticsBatch }) => {
+    const gridRef = useRef<HTMLDivElement>(null);
+
+    useGridScale({ gridRef });
+
+    const { containerHeight } = useContainerHeight({
+        gridRef,
+        updateHeightOn: [value.length],
+    });
+
+    return (
+        <div style={{ height: containerHeight }}>
+            <WrapperGridStyled ref={gridRef}>
+                {value.map((widget, index) => {
+                    return (
+                        <Suspense key={widget.id} fallback={null}>
+                            {/* Widget.tsx ожидает observerRef, но для текущей схемы он не нужен */}
+                            {/* @ts-expect-error TODO */}
+                            <LazyWidget
+                                $prefetchMode={!!widget.$prefetchMode}
+                                widget={widget}
+                                observerRef={null}
+                                sendAnalyticsBatch={sendAnalyticsBatch}
+                                index={index}
+                            />
+                        </Suspense>
+                    );
+                })}
+            </WrapperGridStyled>
+        </div>
+    );
+};
 
 export const Widgets = () => {
     const widgets = useStore($widgets);
     const isShowWidgets = useStore($widgetsShow);
-    const gridRef = useRef<HTMLDivElement>(null);
 
-    const { finalDisplayedList, observerRef, observerElementIndex } =
-        useInfiniteSortedWidgets(widgets);
-
-    const { containerHeight } = useContainerHeight({
-        gridRef,
-        updateHeightOn: [finalDisplayedList.length],
-    });
-
-    useGridScale({ gridRef });
-
-    useEffect(() => resetWidgetsShow, []);
+    useEffect(() => {
+        resetWidgetsShow();
+    }, []);
 
     const { addToBatch } = useBatchAnalytics();
 
-    const renderWidget = (widget: typeof finalDisplayedList[number], index: number) => {
-        return (
-            <Suspense key={widget.id}>
-                {/* Suspense без fallback намеренно: ждём модуль, не показываем "пустышку". */}
-                {/* @ts-expect-error TODO */}
-                <LazyWidget
-                    $prefetchMode={!!widget.$prefetchMode}
-                    widget={widget}
-                    observerRef={index === observerElementIndex ? observerRef : null}
-                    $endAnalyticsBatch={addToBatch}
-                    index={index}
-                />
-            </Suspense>
-        );
-    };
+    const {
+        categoriesStatus,
+        categoryQueue,
+        visibleCategoriesCount,
+        hasMore,
+        isLoadingCategory,
+        loadMoreObserverRef,
+    } = useWidgetsWithPrefetch(widgets);
+
+    const [isWidgetModuleReady, setIsWidgetModuleReady] = useState(false);
+
+    useEffect(() => {
+        let mounted = true;
+
+        widgetModulePromise
+            .then(() => {
+                if (mounted) setIsWidgetModuleReady(true);
+            })
+            .catch(() => {
+                if (mounted) setIsWidgetModuleReady(true);
+            });
+
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    const visibleCategories = useMemo(() => {
+        return categoryQueue.slice(0, visibleCategoriesCount);
+    }, [categoryQueue, visibleCategoriesCount]);
 
     return (
         <WidgetsContainerStyled $show={isShowWidgets}>
-            <div style={{ height: containerHeight }}>
-                <WrapperGridStyled ref={gridRef}>
-                    {finalDisplayedList.map(renderWidget)}
-                </WrapperGridStyled>
-            </div>
+            {visibleCategories.map((categoryName) => {
+                const status = categoriesStatus[categoryName];
+                if (!status) return null;
+
+                if (status.status !== "ready") return null;
+                if (status.validCount <= 0) return null;
+
+                if (!isWidgetModuleReady) return null;
+
+                return (
+                    <div key={categoryName}>
+                        <div style={{ marginTop: 16, marginBottom: 16 }}>
+                            <Text variant="h3Semibold">{categoryName}</Text>
+                        </div>
+
+                        <Grid value={status.validWidgets} sendAnalyticsBatch={addToBatch} />
+                    </div>
+                );
+            })}
+
+            {(hasMore || isLoadingCategory) && (
+                <div ref={(node) => loadMoreObserverRef(node)}>
+                    <SingleCategoryLoader />
+                </div>
+            )}
         </WidgetsContainerStyled>
     );
 };
