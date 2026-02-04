@@ -5,20 +5,32 @@ import URITemplate from "urijs/src/URITemplate";
 
 import type { IWidget } from "../../types";
 
+type RendererDataSource = NonNullable<RootProps["dataSource"]>;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null;
 
-export const loadRendererData = async (
-    dataSource: NonNullable<RootProps["dataSource"]>,
-    abortController: AbortController
-) => {
-    const { method, options = {}, url: uri } = dataSource;
+const toRecord = (value: unknown): Record<string, unknown> | null =>
+    isRecord(value) ? value : null;
 
-    const { pathVariables, requestParams } = options;
-    const template = new URITemplate(uri);
-    const url = new URI(template.expand(pathVariables ?? {}))
+const buildRendererUrl = (
+    uriTemplate: string,
+    options: RendererDataSource["options"]
+): string => {
+    const { pathVariables, requestParams } = options ?? {};
+    const template = new URITemplate(uriTemplate);
+    return new URI(template.expand(pathVariables ?? {}))
         .query(requestParams ?? {})
         .valueOf();
+};
+
+export const loadRendererData = async (
+    dataSource: RendererDataSource,
+    abortController: AbortController
+) => {
+    const { method, options = {}, url: uriTemplate } = dataSource;
+    const url = buildRendererUrl(uriTemplate, options);
+
     const response = await httpClient(url, {
         body: options.requestBody,
         headers: options.headers,
@@ -26,46 +38,57 @@ export const loadRendererData = async (
         signal: abortController.signal,
     });
 
-    const data = await response.json();
-    return data;
+    return response.json();
+};
+
+const findHttpActionIndex = (actions: unknown[]): number => {
+    for (let i = 0; i < actions.length; i++) {
+        const action = actions[i];
+        const actionObj = toRecord(action);
+        if (!actionObj) {
+            // no-op
+        } else {
+            const type = actionObj.type;
+            if (typeof type === "string" && type.startsWith("http.")) {
+                return i;
+            }
+        }
+    }
+
+    return -1;
+};
+
+const toDataSourceFromAction = (action: Record<string, unknown>): RendererDataSource => {
+    const actionType = typeof action.type === "string" ? action.type : "";
+    const method = actionType.split(".")[1];
+
+    return {
+        url: action.url as string,
+        method,
+        options: {
+            requestBody: action.body,
+            headers: action.headers,
+            requestParams: action.params,
+            pathVariables: action.pathVariables,
+        },
+    };
 };
 
 export const migrateOnMountToDataSource = (body: unknown) => {
-    const bodyObj = isRecord(body) ? body : null;
+    const bodyObj = toRecord(body);
     if (!bodyObj) return body;
 
-    const triggers = isRecord(bodyObj.triggers) ? bodyObj.triggers : null;
-    const onMount = isRecord(triggers?.onMount) ? triggers?.onMount : null;
+    const triggers = toRecord(bodyObj.triggers);
+    const onMount = toRecord(triggers?.onMount);
     const onMountAction = onMount?.action;
 
-    if (!Array.isArray(onMountAction)) {
-        return body;
-    }
+    if (!Array.isArray(onMountAction)) return body;
 
-    const requestIndex = onMountAction.findIndex((action: unknown) => {
-        if (typeof action !== "object" || action === null) return false;
-        const actionObj = action as Record<string, unknown>;
-        return typeof actionObj.type === "string" && actionObj.type.startsWith("http.");
-    });
-
-    if (requestIndex === -1) {
-        return body;
-    }
+    const requestIndex = findHttpActionIndex(onMountAction);
+    if (requestIndex === -1) return body;
 
     const requestAction = onMountAction[requestIndex] as Record<string, unknown>;
-    const actionType = requestAction.type as string;
-    const method = actionType.split(".")[1];
-
-    const dataSource = {
-        url: requestAction.url as string,
-        method,
-        options: {
-            requestBody: requestAction.body,
-            headers: requestAction.headers,
-            requestParams: requestAction.params,
-            pathVariables: requestAction.pathVariables,
-        },
-    };
+    const dataSource = toDataSourceFromAction(requestAction);
 
     onMountAction.splice(requestIndex, 1);
 
@@ -185,33 +208,32 @@ export const validateBusinessData = (data: unknown): boolean => {
     return true;
 };
 
-export const getDataSource = (
-    widget: IWidget
-): NonNullable<RootProps["dataSource"]> | null => {
-    if (widget.type === "renderer") {
-        const body = isRecord(widget.body) ? widget.body : null;
-        if (body?.dataSource) {
-            return body.dataSource as NonNullable<RootProps["dataSource"]>;
-        }
+const getRendererDataSource = (widget: IWidget): RendererDataSource | null => {
+    if (widget.type !== "renderer") return null;
 
-        const migratedBody = migrateOnMountToDataSource(widget.body);
-        const migratedRecord = isRecord(migratedBody) ? migratedBody : null;
-        if (migratedRecord?.dataSource) {
-            return migratedRecord.dataSource as NonNullable<RootProps["dataSource"]>;
-        }
-
-        return null;
+    const body = toRecord(widget.body);
+    if (body?.dataSource) {
+        return body.dataSource as RendererDataSource;
     }
 
-    if (widget.type === "importedWidget") {
-        const record = isRecord(widget as unknown) ? (widget as Record<string, unknown>) : null;
-        const dataSource = record?.dataSource;
-        return dataSource
-            ? (dataSource as NonNullable<RootProps["dataSource"]>)
-            : null;
+    const migratedBody = migrateOnMountToDataSource(widget.body);
+    const migratedRecord = toRecord(migratedBody);
+    if (migratedRecord?.dataSource) {
+        return migratedRecord.dataSource as RendererDataSource;
     }
 
     return null;
+};
+
+const getImportedWidgetDataSource = (widget: IWidget): RendererDataSource | null => {
+    if (widget.type !== "importedWidget") return null;
+    const record = toRecord(widget as unknown);
+    if (!record?.dataSource) return null;
+    return record.dataSource as RendererDataSource;
+};
+
+export const getDataSource = (widget: IWidget): RendererDataSource | null => {
+    return getRendererDataSource(widget) ?? getImportedWidgetDataSource(widget);
 };
 
 export const categorizeWidgets = (widgets: IWidget[]): Record<string, IWidget[]> => {

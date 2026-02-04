@@ -1,4 +1,4 @@
-import { FC, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { FC, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { Text } from "@pulse/ui/components/Text";
 
@@ -13,21 +13,12 @@ import {
     WidgetWithPrefetch,
 } from "./hooks/useWidgetsWithPrefetch";
 
-const widgetModulePromise = import("./Widget");
+const widgetModulePreload = import("./Widget");
 const LazyWidget = lazy(() =>
-    widgetModulePromise.then(({ Widget }) => ({ default: Widget }))
+    widgetModulePreload.then(({ Widget }) => ({ default: Widget }))
 );
 
-const canRenderCategory = (
-    status: { status: "pending" | "loading" | "ready" | "empty"; validCount: number },
-    isWidgetModuleReady: boolean
-) => {
-    if (status.status !== "ready") return false;
-    if (status.validCount <= 0) return false;
-    return isWidgetModuleReady;
-};
-
-const SingleCategoryLoader: FC = () => {
+const LoadingMoreIndicator: FC = () => {
     return (
         <div style={{ padding: "16px", textAlign: "center" }}>
             <Text variant="bodyMRegular">Загрузка…</Text>
@@ -36,9 +27,9 @@ const SingleCategoryLoader: FC = () => {
 };
 
 const Grid: FC<{
-    value: WidgetWithPrefetch[];
+    widgets: WidgetWithPrefetch[];
     sendAnalyticsBatch: (events: unknown[]) => void;
-}> = ({ value, sendAnalyticsBatch }) => {
+}> = ({ widgets, sendAnalyticsBatch }) => {
     const gridRef = useRef<HTMLDivElement>(null);
 
     useGridScale({ gridRef });
@@ -46,7 +37,7 @@ const Grid: FC<{
     return (
         <div>
             <WrapperGridStyled ref={gridRef}>
-                {value.map((widget, index) => {
+                {widgets.map((widget, index) => {
                     return (
                         <Suspense key={widget.id} fallback={null}>
                             {/* Widget.tsx ожидает observerRef, но для текущей схемы он не нужен */}
@@ -76,21 +67,15 @@ export const Widgets = () => {
 
     const { addToBatch } = useBatchAnalytics();
 
-    const {
-        categoriesStatus,
-        categoryQueue,
-        visibleCategoriesCount,
-        hasMore,
-        isLoadingCategory,
-        loadMoreObserverRef,
-    } = useWidgetsWithPrefetch(widgets);
+    const { preparedCategories, hasMore, loadMoreObserverRef } =
+        useWidgetsWithPrefetch(widgets);
 
     const [isWidgetModuleReady, setIsWidgetModuleReady] = useState(false);
 
     useEffect(() => {
         let mounted = true;
 
-        widgetModulePromise
+        widgetModulePreload
             .then(() => {
                 if (mounted) setIsWidgetModuleReady(true);
             })
@@ -103,33 +88,27 @@ export const Widgets = () => {
         };
     }, []);
 
-    const visibleCategories = useMemo(() => {
-        return categoryQueue.slice(0, visibleCategoriesCount);
-    }, [categoryQueue, visibleCategoriesCount]);
-
-    const renderCategory = (categoryName: string) => {
-        const status = categoriesStatus[categoryName];
-        if (!status) return null;
-        if (!canRenderCategory(status, isWidgetModuleReady)) return null;
+    const renderCategory = (category: { title: string; widgets: WidgetWithPrefetch[] }) => {
+        if (!isWidgetModuleReady) return null;
 
         return (
-            <div key={categoryName}>
+            <div key={category.title}>
                 <div style={{ marginTop: 16, marginBottom: 16 }}>
-                    <Text variant="h3Semibold">{categoryName}</Text>
+                    <Text variant="h3Semibold">{category.title}</Text>
                 </div>
 
-                <Grid value={status.validWidgets} sendAnalyticsBatch={addToBatch} />
+                <Grid widgets={category.widgets} sendAnalyticsBatch={addToBatch} />
             </div>
         );
     };
 
     return (
         <WidgetsContainerStyled $show={isShowWidgets}>
-            {visibleCategories.map(renderCategory)}
+            {preparedCategories.map(renderCategory)}
 
-            {(hasMore || isLoadingCategory) && (
+            {hasMore && (
                 <div ref={loadMoreObserverRef}>
-                    <SingleCategoryLoader />
+                    <LoadingMoreIndicator />
                 </div>
             )}
         </WidgetsContainerStyled>
