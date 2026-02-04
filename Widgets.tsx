@@ -69,6 +69,7 @@ const Grid: FC<{
 export const Widgets = () => {
     const widgets = useStore($widgets);
     const isShowWidgets = useStore($widgetsShow);
+    const DEBUG = true;
 
     useEffect(() => {
         resetWidgetsShow();
@@ -122,6 +123,16 @@ export const Widgets = () => {
             </div>
         );
     };
+
+    useEffect(() => {
+        if (!DEBUG) return;
+        console.log("[WIDGETS]", {
+            visibleCategoriesCount,
+            hasMore,
+            isLoadingCategory,
+            renderedCategories: categoryQueue.slice(0, visibleCategoriesCount),
+        });
+    }, [DEBUG, visibleCategoriesCount, hasMore, isLoadingCategory, categoryQueue]);
 
     return (
         <WidgetsContainerStyled $show={isShowWidgets}>

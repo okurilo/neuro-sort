@@ -12,6 +12,12 @@ import {
     validateBusinessData,
 } from "./utils";
 
+const DEBUG = true;
+const debugLog = (...args: unknown[]) => {
+    if (!DEBUG) return;
+    console.log("[PREFETCH]", ...args);
+};
+
 type CategoryLoadStatus = "pending" | "loading" | "ready" | "empty";
 
 export interface WidgetWithPrefetch extends IWidget {
@@ -116,6 +122,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
     useEffect(() => {
         runIdRef.current += 1;
+        const runId = runIdRef.current;
 
         abortControllerRef.current.abort();
         abortControllerRef.current = new AbortController();
@@ -146,10 +153,23 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
             };
         }
 
+        const initialVisibleCount = Math.min(INITIAL_VISIBLE_CATEGORIES, queue.length);
         setCategoryQueue(queue);
-        setVisibleCategoriesCount(Math.min(INITIAL_VISIBLE_CATEGORIES, queue.length));
+        setVisibleCategoriesCount(initialVisibleCount);
         setCategoriesStatus(initial);
         setIsLoadingCategory(false);
+        if (DEBUG) {
+            const statusMap = Object.fromEntries(
+                Object.entries(initial).map(([name, st]) => [name, st.status])
+            );
+            debugLog("init", {
+                runId,
+                widgetsKey,
+                queueLength: queue.length,
+                initialVisibleCount,
+                statusMap,
+            });
+        }
     }, [widgetsKey]);
 
     const hasMore = visibleCategoriesCount < categoryQueue.length;
@@ -161,7 +181,13 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
     useEffect(() => {
         sentinelInViewRef.current = isIntersecting;
-    }, [isIntersecting]);
+        debugLog("observer", {
+            isIntersecting,
+            hasMore,
+            visibleCategoriesCount,
+            queueLength: categoryQueue.length,
+        });
+    }, [isIntersecting, hasMore, visibleCategoriesCount, categoryQueue.length]);
 
     useEffect(() => {
         if (!isIntersecting) return;
@@ -191,6 +217,12 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         const runId = runIdRef.current;
         inFlightRef.current = true;
         setIsLoadingCategory(true);
+        debugLog("start-category", {
+            runId,
+            nextName,
+            visibleCategoriesCount,
+            inFlight: inFlightRef.current,
+        });
 
         const run = async () => {
             const candidates = sortWidgets(categorizedCandidatesRef.current[nextName] || []);
@@ -200,18 +232,42 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 if (runId !== runIdRef.current) return;
 
                 if (widget.type === "importedWidget") {
+                    debugLog("prefetch-widget", {
+                        code: widget.code,
+                        type: widget.type,
+                        dataSource: false,
+                        valid: true,
+                    });
                     valid.push(toFinalWidget(widget));
                 } else {
                     const ds = getDataSource(widget);
                     if (!ds) {
+                        debugLog("prefetch-widget", {
+                            code: widget.code,
+                            type: widget.type,
+                            dataSource: false,
+                            valid: true,
+                        });
                         valid.push(toFinalWidget(widget));
                     } else {
                         try {
                             const data = await loadRendererData(ds, abortControllerRef.current);
-                            if (validateBusinessData(data)) {
+                            const ok = validateBusinessData(data);
+                            debugLog("prefetch-widget", {
+                                code: widget.code,
+                                type: widget.type,
+                                dataSource: true,
+                                valid: ok,
+                            });
+                            if (ok) {
                                 valid.push(toFinalWidget(widget, { data, dataSource: undefined }));
                             }
-                        } catch {
+                        } catch (error) {
+                            debugLog("prefetch-error", {
+                                code: widget.code,
+                                type: widget.type,
+                                error,
+                            });
                             valid.push(toFinalWidget(widget));
                         }
                     }
@@ -230,6 +286,12 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 };
                 return { ...prev, [nextName]: nextItem };
             });
+            debugLog("finish-category", {
+                runId,
+                nextName,
+                validCount,
+                status: validCount > 0 ? "ready" : "empty",
+            });
 
             if (!hasShownWidgetsRef.current && validCount > 0) {
                 hasShownWidgetsRef.current = true;
@@ -245,9 +307,23 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 setIsLoadingCategory(false);
 
                 if (sentinelInViewRef.current) {
-                    setVisibleCategoriesCount((prev) =>
-                        prev < categoryQueue.length ? prev + 1 : prev
-                    );
+                    setVisibleCategoriesCount((prev) => {
+                        const next = prev < categoryQueue.length ? prev + 1 : prev;
+                        debugLog("auto-advance", {
+                            runId,
+                            sentinelInView: sentinelInViewRef.current,
+                            prev,
+                            next,
+                            queueLength: categoryQueue.length,
+                        });
+                        return next;
+                    });
+                } else {
+                    debugLog("no-auto-advance", {
+                        runId,
+                        sentinelInView: sentinelInViewRef.current,
+                        visibleCategoriesCount,
+                    });
                 }
             });
     }, [categoryQueue, categoriesStatus, visibleCategoriesCount]);
