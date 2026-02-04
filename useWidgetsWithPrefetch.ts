@@ -100,6 +100,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const [categoriesStatus, setCategoriesStatus] = useState<Record<string, CategoryStatus>>({});
     const [categoryQueue, setCategoryQueue] = useState<string[]>([]);
     const [visibleCategoriesCount, setVisibleCategoriesCount] = useState(INITIAL_VISIBLE_CATEGORIES);
+    const [revealQueue, setRevealQueue] = useState(0);
     const [isLoadingCategory, setIsLoadingCategory] = useState(false);
 
     const runIdRef = useRef(0);
@@ -107,7 +108,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const inFlightRef = useRef(false);
     const hasShownWidgetsRef = useRef(false);
     const categorizedCandidatesRef = useRef<Record<string, IWidget[]>>({});
-    const sentinelInViewRef = useRef(false);
+    const wasIntersectingRef = useRef(false);
 
     const widgetsKey = useMemo(
         () => widgets.map((w) => String(w.code)).sort().join("|"),
@@ -122,7 +123,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
         inFlightRef.current = false;
         hasShownWidgetsRef.current = false;
-        sentinelInViewRef.current = false;
+        wasIntersectingRef.current = false;
 
         const categorized = categorizeWidgets(widgets);
         categorizedCandidatesRef.current = categorized;
@@ -148,6 +149,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
         setCategoryQueue(queue);
         setVisibleCategoriesCount(Math.min(INITIAL_VISIBLE_CATEGORIES, queue.length));
+        setRevealQueue(0);
         setCategoriesStatus(initial);
         setIsLoadingCategory(false);
     }, [widgetsKey]);
@@ -160,21 +162,27 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     });
 
     useEffect(() => {
-        sentinelInViewRef.current = isIntersecting;
+        if (isIntersecting) {
+            if (!wasIntersectingRef.current) {
+                setRevealQueue((prev) => prev + 1);
+            }
+            wasIntersectingRef.current = true;
+            return;
+        }
+
+        wasIntersectingRef.current = false;
     }, [isIntersecting]);
 
     useEffect(() => {
-        if (!isIntersecting) return;
-        if (!hasMore) return;
         if (inFlightRef.current) return;
 
-        setVisibleCategoriesCount((prev) =>
-            prev < categoryQueue.length ? prev + 1 : prev
-        );
-    }, [isIntersecting, hasMore, categoryQueue.length]);
-
-    useEffect(() => {
-        if (inFlightRef.current) return;
+        if (revealQueue > 0 && hasMore) {
+            setVisibleCategoriesCount((prev) =>
+                prev < categoryQueue.length ? prev + 1 : prev
+            );
+            setRevealQueue((prev) => (prev > 0 ? prev - 1 : 0));
+            return;
+        }
 
         let nextName: string | null = null;
         const maxIndex = Math.min(visibleCategoriesCount, categoryQueue.length);
@@ -243,14 +251,14 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 if (runId !== runIdRef.current) return;
                 inFlightRef.current = false;
                 setIsLoadingCategory(false);
-
-                if (sentinelInViewRef.current) {
-                    setVisibleCategoriesCount((prev) =>
-                        prev < categoryQueue.length ? prev + 1 : prev
-                    );
-                }
             });
-    }, [categoryQueue, categoriesStatus, visibleCategoriesCount]);
+    }, [
+        categoryQueue,
+        categoriesStatus,
+        visibleCategoriesCount,
+        revealQueue,
+        hasMore,
+    ]);
 
     useEffect(() => {
         return () => {
