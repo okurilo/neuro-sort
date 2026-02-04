@@ -111,6 +111,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const runIdRef = useRef(0);
     const abortControllerRef = useRef<AbortController>(new AbortController());
     const inFlightRef = useRef(false);
+    const needNextRef = useRef(false);
     const hasShownWidgetsRef = useRef(false);
     const categorizedCandidatesRef = useRef<Record<string, IWidget[]>>({});
     const sentinelInViewRef = useRef(false);
@@ -128,6 +129,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         abortControllerRef.current = new AbortController();
 
         inFlightRef.current = false;
+        needNextRef.current = false;
         hasShownWidgetsRef.current = false;
         sentinelInViewRef.current = false;
 
@@ -186,17 +188,25 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
             hasMore,
             visibleCategoriesCount,
             queueLength: categoryQueue.length,
+            needNext: needNextRef.current,
         });
     }, [isIntersecting, hasMore, visibleCategoriesCount, categoryQueue.length]);
 
     useEffect(() => {
         if (!isIntersecting) return;
         if (!hasMore) return;
-        if (inFlightRef.current) return;
+        if (inFlightRef.current) {
+            needNextRef.current = true;
+            debugLog("need-next-set", { reason: "observer", inFlight: true });
+            return;
+        }
 
-        setVisibleCategoriesCount((prev) =>
-            prev < categoryQueue.length ? prev + 1 : prev
-        );
+        setVisibleCategoriesCount((prev) => {
+            const next = prev < categoryQueue.length ? prev + 1 : prev;
+            debugLog("advance-by-observer", { prev, next, queueLength: categoryQueue.length });
+            return next;
+        });
+        needNextRef.current = false;
     }, [isIntersecting, hasMore, categoryQueue.length]);
 
     useEffect(() => {
@@ -306,11 +316,20 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 inFlightRef.current = false;
                 setIsLoadingCategory(false);
 
-                if (sentinelInViewRef.current) {
+                if (!hasMore) {
+                    if (needNextRef.current) {
+                        debugLog("need-next-reset", { reason: "no-more" });
+                    }
+                    needNextRef.current = false;
+                    return;
+                }
+
+                if (needNextRef.current || sentinelInViewRef.current) {
                     setVisibleCategoriesCount((prev) => {
                         const next = prev < categoryQueue.length ? prev + 1 : prev;
                         debugLog("auto-advance", {
                             runId,
+                            needNext: needNextRef.current,
                             sentinelInView: sentinelInViewRef.current,
                             prev,
                             next,
@@ -318,6 +337,10 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                         });
                         return next;
                     });
+                    if (needNextRef.current) {
+                        debugLog("need-next-reset", { reason: "auto-advance" });
+                    }
+                    needNextRef.current = false;
                 } else {
                     debugLog("no-auto-advance", {
                         runId,
@@ -326,7 +349,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                     });
                 }
             });
-    }, [categoryQueue, categoriesStatus, visibleCategoriesCount]);
+    }, [categoryQueue, categoriesStatus, visibleCategoriesCount, hasMore]);
 
     useEffect(() => {
         return () => {
