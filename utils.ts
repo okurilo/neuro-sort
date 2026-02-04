@@ -5,6 +5,12 @@ import URITemplate from "urijs/src/URITemplate";
 
 import type { IWidget } from "../../types";
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+const getRecord = (value: unknown): Record<string, unknown> | null =>
+    isRecord(value) ? value : null;
+
 const buildUrl = (
     url: NonNullable<RootProps["dataSource"]>["url"],
     options: NonNullable<RootProps["dataSource"]>["options"]
@@ -40,13 +46,11 @@ export const loadRendererData = async (
 };
 
 export const migrateOnMountToDataSource = (body: unknown) => {
-    if (typeof body !== "object" || body === null) {
-        return body;
-    }
+    const bodyObj = getRecord(body);
+    if (!bodyObj) return body;
 
-    const bodyObj = body as Record<string, unknown>;
-    const triggers = bodyObj.triggers as Record<string, unknown> | undefined;
-    const onMount = triggers?.onMount as Record<string, unknown> | undefined;
+    const triggers = getRecord(bodyObj.triggers);
+    const onMount = getRecord(triggers?.onMount);
     const onMountAction = onMount?.action;
 
     if (!Array.isArray(onMountAction)) {
@@ -80,14 +84,10 @@ export const migrateOnMountToDataSource = (body: unknown) => {
 
     onMountAction.splice(requestIndex, 1);
 
-    if (onMountAction.length === 0) {
-        delete (onMount as Record<string, unknown>).action;
-        if (Object.keys(onMount as object).length === 0) {
-            delete (triggers as Record<string, unknown>).onMount;
-        }
-        if (Object.keys(triggers as object).length === 0) {
-            delete (bodyObj as Record<string, unknown>).triggers;
-        }
+    if (onMountAction.length === 0 && onMount && triggers) {
+        delete onMount.action;
+        if (Object.keys(onMount).length === 0) delete triggers.onMount;
+        if (Object.keys(triggers).length === 0) delete bodyObj.triggers;
     }
 
     return {
@@ -181,6 +181,14 @@ export const CATEGORY_MAPPING: Record<string, CategoryConfig> = {
 
 export const FALLBACK_CATEGORY = "разное";
 
+const CODE_TO_CATEGORY: Record<string, string> = Object.entries(CATEGORY_MAPPING).reduce(
+    (acc, [categoryName, config]) => {
+        for (const code of config.codes) acc[code] = categoryName;
+        return acc;
+    },
+    {} as Record<string, string>
+);
+
 export const validateBusinessData = (data: unknown): boolean => {
     if (data === null || data === undefined) return false;
 
@@ -192,51 +200,49 @@ export const validateBusinessData = (data: unknown): boolean => {
     return true;
 };
 
-export const getDataSource = (
+const getRendererDataSource = (
     widget: IWidget
 ): NonNullable<RootProps["dataSource"]> | null => {
-    if (widget.type === "renderer") {
-        const body = widget.body as unknown as { dataSource?: unknown; triggers?: unknown };
+    if (widget.type !== "renderer") return null;
 
-        if (body?.dataSource) {
-            return body.dataSource as NonNullable<RootProps["dataSource"]>;
-        }
-
-        const migratedBody = migrateOnMountToDataSource(widget.body);
-        const migratedTyped = migratedBody as { dataSource?: unknown };
-
-        if (migratedTyped?.dataSource) {
-            return migratedTyped.dataSource as NonNullable<RootProps["dataSource"]>;
-        }
-
-        return null;
+    const body = getRecord(widget.body);
+    if (body?.dataSource) {
+        return body.dataSource as NonNullable<RootProps["dataSource"]>;
     }
 
-    if (widget.type === "importedWidget") {
-        const importedWidget = widget as unknown as { dataSource?: unknown };
-        if (importedWidget.dataSource) {
-            return importedWidget.dataSource as NonNullable<RootProps["dataSource"]>;
-        }
-        return null;
+    const migratedBody = migrateOnMountToDataSource(widget.body);
+    const migratedRecord = getRecord(migratedBody);
+    if (migratedRecord?.dataSource) {
+        return migratedRecord.dataSource as NonNullable<RootProps["dataSource"]>;
     }
 
     return null;
 };
 
+const getImportedDataSource = (
+    widget: IWidget
+): NonNullable<RootProps["dataSource"]> | null => {
+    if (widget.type !== "importedWidget") return null;
+
+    const record = getRecord(widget as unknown);
+    const dataSource = record?.dataSource;
+    return dataSource
+        ? (dataSource as NonNullable<RootProps["dataSource"]>)
+        : null;
+};
+
+export const getDataSource = (
+    widget: IWidget
+): NonNullable<RootProps["dataSource"]> | null => {
+    return getRendererDataSource(widget) ?? getImportedDataSource(widget);
+};
+
 export const categorizeWidgets = (widgets: IWidget[]): Record<string, IWidget[]> => {
     const result: Record<string, IWidget[]> = {};
-    const codeToCategory: Record<string, string> = {};
-
-    for (const [categoryName, config] of Object.entries(CATEGORY_MAPPING)) {
-        for (const code of config.codes) {
-            codeToCategory[code] = categoryName;
-        }
-    }
-
     const fallback: IWidget[] = [];
 
     for (const widget of widgets) {
-        const categoryName = codeToCategory[widget.code];
+        const categoryName = CODE_TO_CATEGORY[widget.code];
         if (categoryName) {
             if (!result[categoryName]) result[categoryName] = [];
             result[categoryName].push(widget);

@@ -1,4 +1,4 @@
-import { FC, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { FC, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { Text } from "@pulse/ui/components/Text";
 
@@ -18,6 +18,15 @@ const widgetModulePromise = import("./Widget");
 const LazyWidget = lazy(() =>
     widgetModulePromise.then(({ Widget }) => ({ default: Widget }))
 );
+
+const canRenderCategory = (
+    status: { status: "pending" | "loading" | "ready" | "empty"; validCount: number },
+    isWidgetModuleReady: boolean
+) => {
+    if (status.status !== "ready") return false;
+    if (status.validCount <= 0) return false;
+    return isWidgetModuleReady;
+};
 
 const SingleCategoryLoader: FC = () => {
     return (
@@ -104,30 +113,33 @@ export const Widgets = () => {
         return categoryQueue.slice(0, visibleCategoriesCount);
     }, [categoryQueue, visibleCategoriesCount]);
 
+    const loadMoreRef = useCallback(
+        (node: HTMLDivElement | null) => loadMoreObserverRef(node),
+        [loadMoreObserverRef]
+    );
+
+    const renderCategory = (categoryName: string) => {
+        const status = categoriesStatus[categoryName];
+        if (!status) return null;
+        if (!canRenderCategory(status, isWidgetModuleReady)) return null;
+
+        return (
+            <div key={categoryName}>
+                <div style={{ marginTop: 16, marginBottom: 16 }}>
+                    <Text variant="h3Semibold">{categoryName}</Text>
+                </div>
+
+                <Grid value={status.validWidgets} sendAnalyticsBatch={addToBatch} />
+            </div>
+        );
+    };
+
     return (
         <WidgetsContainerStyled $show={isShowWidgets}>
-            {visibleCategories.map((categoryName) => {
-                const status = categoriesStatus[categoryName];
-                if (!status) return null;
-
-                if (status.status !== "ready") return null;
-                if (status.validCount <= 0) return null;
-
-                if (!isWidgetModuleReady) return null;
-
-                return (
-                    <div key={categoryName}>
-                        <div style={{ marginTop: 16, marginBottom: 16 }}>
-                            <Text variant="h3Semibold">{categoryName}</Text>
-                        </div>
-
-                        <Grid value={status.validWidgets} sendAnalyticsBatch={addToBatch} />
-                    </div>
-                );
-            })}
+            {visibleCategories.map(renderCategory)}
 
             {(hasMore || isLoadingCategory) && (
-                <div ref={(node) => loadMoreObserverRef(node)}>
+                <div ref={loadMoreRef}>
                     <SingleCategoryLoader />
                 </div>
             )}

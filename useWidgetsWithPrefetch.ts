@@ -25,6 +25,12 @@ export interface CategoryStatus {
 
 const INITIAL_VISIBLE_CATEGORIES = 2;
 
+const buildWidgetsKey = (widgets: IWidget[]) => {
+    const parts = widgets.map((w) => `${String(w.id)}:${String(w.code)}`);
+    parts.sort();
+    return parts.join("|");
+};
+
 /**
  * LEGACY: НЕ ТРОГАЕМ
  */
@@ -85,7 +91,7 @@ const sortWidgets = <T extends { availableSizes: unknown }>(widgets: T[]): T[] =
     return result;
 };
 
-const buildCategoryQueue = (categorizedCandidates: Record<string, IWidget[]>) => {
+const buildQueue = (categorizedCandidates: Record<string, IWidget[]>) => {
     const base = Object.entries(CATEGORY_MAPPING)
         .map(([name, config]) => ({ name, ordering: config.ordering }))
         .sort((a, b) => a.ordering - b.ordering)
@@ -98,13 +104,30 @@ const buildCategoryQueue = (categorizedCandidates: Record<string, IWidget[]>) =>
     return base;
 };
 
-const isTerminal = (s: CategoryLoadStatus) => s === "ready" || s === "empty";
+const initStatus = (
+    queue: string[],
+    categorizedCandidates: Record<string, IWidget[]>
+): Record<string, CategoryStatus> => {
+    const initial: Record<string, CategoryStatus> = {};
+    for (const name of queue) {
+        const candidates = categorizedCandidates[name] || [];
+        initial[name] = {
+            status: candidates.length > 0 ? "pending" : "empty",
+            validWidgets: [],
+            validCount: 0,
+        };
+    }
+    return initial;
+};
+
+const isTerminal = (status: CategoryLoadStatus) =>
+    status === "ready" || status === "empty";
 
 const findNextPending = (
     queue: string[],
     statusMap: Record<string, CategoryStatus>,
     visibleCount: number
-) => {
+): string | null => {
     const maxIndex = Math.min(visibleCount, queue.length);
     for (let i = 0; i < maxIndex; i++) {
         const name = queue[i];
@@ -113,6 +136,16 @@ const findNextPending = (
     }
     return null;
 };
+
+const toFinalWidget = (
+    widget: IWidget,
+    overrides?: Partial<WidgetWithPrefetch>
+): WidgetWithPrefetch => ({
+    ...widget,
+    data: undefined,
+    $prefetchMode: false,
+    ...overrides,
+});
 
 export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const [categoriesStatus, setCategoriesStatus] = useState<Record<string, CategoryStatus>>({});
@@ -139,22 +172,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const revealInFlightRef = useRef(false);
 
     // stable key = реальная смена набора
-    const widgetsKey = useMemo(() => {
-        const parts = widgets.map((w) => `${String(w.id)}:${String(w.code)}`);
-        parts.sort();
-        return parts.join("|");
-    }, [widgets]);
-
-    // compute candidates/queue on widgets change
-    useEffect(() => {
-        const sorted = sortWidgets(widgets);
-        const categorized = categorizeWidgets(sorted);
-        categorizedCandidatesRef.current = categorized;
-
-        const queue = buildCategoryQueue(categorized);
-        queueLenRef.current = queue.length;
-        setCategoryQueue(queue);
-    }, [widgetsKey]);
+    const widgetsKey = useMemo(() => buildWidgetsKey(widgets), [widgets]);
 
     // INIT (не по производным объектам!)
     useEffect(() => {
@@ -173,23 +191,16 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
         setHasUserScrolled(false);
 
-        const queue = buildCategoryQueue(categorizedCandidatesRef.current);
+        const sorted = sortWidgets(widgets);
+        const categorized = categorizeWidgets(sorted);
+        categorizedCandidatesRef.current = categorized;
+
+        const queue = buildQueue(categorized);
         queueLenRef.current = queue.length;
 
         setCategoryQueue(queue);
         setVisibleCategoriesCount(Math.min(INITIAL_VISIBLE_CATEGORIES, queue.length));
-
-        const initial: Record<string, CategoryStatus> = {};
-        for (const name of queue) {
-            const candidates = categorizedCandidatesRef.current[name] || [];
-            initial[name] = {
-                status: candidates.length > 0 ? "pending" : "empty",
-                validWidgets: [],
-                validCount: 0,
-            };
-        }
-
-        setCategoriesStatus(initial);
+        setCategoriesStatus(initStatus(queue, categorized));
         setIsLoadingCategory(false);
     }, [widgetsKey]);
 
@@ -232,85 +243,62 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         };
     }, [hasUserScrolled]);
 
-    const safePatch = useCallback((runId: number, name: string, patch: Partial<CategoryStatus>) => {
-        if (runId !== runIdRef.current) return;
+    const patchCategory = useCallback(
+        (runId: number, name: string, patch: Partial<CategoryStatus>) => {
+            if (runId !== runIdRef.current) return;
 
-        setCategoriesStatus((prev) => {
-            const prevItem = prev[name];
-            if (!prevItem) return prev;
-            const nextItem: CategoryStatus = { ...prevItem, ...patch };
-            return { ...prev, [name]: nextItem };
-        });
+            setCategoriesStatus((prev) => {
+                const prevItem = prev[name];
+                if (!prevItem) return prev;
+                const nextItem: CategoryStatus = { ...prevItem, ...patch };
+                return { ...prev, [name]: nextItem };
+            });
 
-        if (!hasShownWidgetsRef.current && typeof patch.validCount === "number") {
-            if (patch.validCount > 0) {
-                hasShownWidgetsRef.current = true;
-                widgetsShowChanged();
-            }
-        }
-    }, []);
-
-    const finalize = useCallback(
-        (runId: number, name: string, list: WidgetWithPrefetch[]) => {
-            if (list.length > 0) {
-                safePatch(runId, name, { status: "ready", validWidgets: list, validCount: list.length });
-            } else {
-                safePatch(runId, name, { status: "empty", validWidgets: [], validCount: 0 });
-            }
-        },
-        [safePatch]
-    );
-
-    const prefetchWidget = useCallback(
-        async (runId: number, widget: IWidget) => {
-            if (runId !== runIdRef.current) return null;
-
-            // IMPORTANT: $prefetchMode НЕ должен скрывать виджет в финальном UI => всегда false.
-            // IMPORTANT: data не должен “протекать” в обычном режиме => data: undefined.
-
-            // ImportedWidget: никаких prefetched-data, никаких скрывающих режимов
-            if (widget.type === "importedWidget") {
-                return {
-                    ...widget,
-                    data: undefined,
-                    $prefetchMode: false,
-                } as WidgetWithPrefetch;
-            }
-
-            const ds = getDataSource(widget);
-
-            // нет dataSource -> виджет валидный, обычный режим
-            if (!ds) {
-                return {
-                    ...widget,
-                    data: undefined,
-                    $prefetchMode: false,
-                } as WidgetWithPrefetch;
-            }
-
-            try {
-                const data = await loadRendererData(ds, abortControllerRef.current);
-                const ok = validateBusinessData(data);
-                if (!ok) return null;
-
-                // есть prefetched data -> кладём data, но УБИРАЕМ dataSource (чтобы Renderer не дергал второй раз)
-                return {
-                    ...widget,
-                    data,
-                    dataSource: undefined,
-                    $prefetchMode: false,
-                } as WidgetWithPrefetch;
-            } catch {
-                // сеть/парсинг не должны “убивать” категорию — обычный режим
-                return {
-                    ...widget,
-                    data: undefined,
-                    $prefetchMode: false,
-                } as WidgetWithPrefetch;
+            if (!hasShownWidgetsRef.current && typeof patch.validCount === "number") {
+                if (patch.validCount > 0) {
+                    hasShownWidgetsRef.current = true;
+                    widgetsShowChanged();
+                }
             }
         },
         []
     );
+
+    const finalizeCategory = useCallback(
+        (runId: number, name: string, list: WidgetWithPrefetch[]) => {
+            patchCategory(runId, name, {
+                status: list.length > 0 ? "ready" : "empty",
+                validWidgets: list,
+                validCount: list.length,
+            });
+        },
+        [patchCategory]
+    );
+
+    const prefetchWidget = useCallback(async (runId: number, widget: IWidget) => {
+        if (runId !== runIdRef.current) return null;
+
+        // IMPORTANT: $prefetchMode НЕ должен скрывать виджет в финальном UI => всегда false.
+        // IMPORTANT: data не должен “протекать” в обычном режиме => data: undefined.
+
+        if (widget.type === "importedWidget") {
+            return toFinalWidget(widget);
+        }
+
+        const ds = getDataSource(widget);
+        if (!ds) return toFinalWidget(widget);
+
+        try {
+            const data = await loadRendererData(ds, abortControllerRef.current);
+            if (!validateBusinessData(data)) return null;
+
+            // есть prefetched data -> кладём data, но УБИРАЕМ dataSource (чтобы Renderer не дергал второй раз)
+            return toFinalWidget(widget, { data, dataSource: undefined });
+        } catch {
+            // сеть/парсинг не должны “убивать” категорию — обычный режим
+            return toFinalWidget(widget);
+        }
+    }, []);
 
     const processCategory = useCallback(
         async (runId: number, categoryName: string) => {
@@ -318,11 +306,11 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
             const candidates = categorizedCandidatesRef.current[categoryName] || [];
             if (candidates.length === 0) {
-                finalize(runId, categoryName, []);
+                finalizeCategory(runId, categoryName, []);
                 return;
             }
 
-            safePatch(runId, categoryName, { status: "loading" });
+            patchCategory(runId, categoryName, { status: "loading" });
 
             const valid: WidgetWithPrefetch[] = [];
 
@@ -334,9 +322,9 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
             }
 
             const finalList = sortWidgets(valid);
-            finalize(runId, categoryName, finalList);
+            finalizeCategory(runId, categoryName, finalList);
         },
-        [finalize, prefetchWidget, safePatch]
+        [finalizeCategory, patchCategory, prefetchWidget]
     );
 
     // orchestrator: strictly one pending within visible window
