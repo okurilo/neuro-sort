@@ -188,30 +188,8 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         inFlightRef.current = true;
         setIsLoadingCategory(true);
 
-        (async () => {
+        const run = async () => {
             const candidates = sortWidgets(categorizedCandidatesRef.current[nextName] || []);
-            if (candidates.length === 0) {
-                setCategoriesStatus((prev) => {
-                    const prevItem = prev[nextName];
-                    if (!prevItem) return prev;
-                    const nextItem: CategoryStatus = {
-                        ...prevItem,
-                        status: "empty",
-                        validWidgets: [],
-                        validCount: 0,
-                    };
-                    return { ...prev, [nextName]: nextItem };
-                });
-                return;
-            }
-
-            setCategoriesStatus((prev) => {
-                const prevItem = prev[nextName];
-                if (!prevItem) return prev;
-                const nextItem: CategoryStatus = { ...prevItem, status: "loading" };
-                return { ...prev, [nextName]: nextItem };
-            });
-
             const valid: WidgetWithPrefetch[] = [];
 
             for (const widget of candidates) {
@@ -253,17 +231,21 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 hasShownWidgetsRef.current = true;
                 widgetsShowChanged();
             }
-        })().finally(() => {
-            if (runId !== runIdRef.current) return;
-            inFlightRef.current = false;
-            setIsLoadingCategory(false);
+        };
 
-            if (sentinelInViewRef.current) {
-                setVisibleCategoriesCount((prev) =>
-                    prev < categoryQueue.length ? prev + 1 : prev
-                );
-            }
-        });
+        run()
+            .catch(() => {})
+            .finally(() => {
+                if (runId !== runIdRef.current) return;
+                inFlightRef.current = false;
+                setIsLoadingCategory(false);
+
+                if (sentinelInViewRef.current) {
+                    setVisibleCategoriesCount((prev) =>
+                        prev < categoryQueue.length ? prev + 1 : prev
+                    );
+                }
+            });
     }, [categoryQueue, categoriesStatus, visibleCategoriesCount]);
 
     useEffect(() => {

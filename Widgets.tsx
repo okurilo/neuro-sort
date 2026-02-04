@@ -1,4 +1,4 @@
-import { FC, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FC, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { Text } from "@pulse/ui/components/Text";
 
@@ -113,11 +113,6 @@ export const Widgets = () => {
         return categoryQueue.slice(0, visibleCategoriesCount);
     }, [categoryQueue, visibleCategoriesCount]);
 
-    const loadMoreRef = useCallback(
-        (node: HTMLDivElement | null) => loadMoreObserverRef(node),
-        [loadMoreObserverRef]
-    );
-
     const renderCategory = (categoryName: string) => {
         const status = categoriesStatus[categoryName];
         if (!status) return null;
@@ -139,7 +134,7 @@ export const Widgets = () => {
             {visibleCategories.map(renderCategory)}
 
             {(hasMore || isLoadingCategory) && (
-                <div ref={loadMoreRef}>
+                <div ref={loadMoreObserverRef}>
                     <SingleCategoryLoader />
                 </div>
             )}

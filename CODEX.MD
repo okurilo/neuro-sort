@@ -26,3 +26,4 @@
 - `useWidgetsWithPrefetch.ts`: сортировка только внутри категории, удалён `buildWidgetsKey`, подключён `useIntersectionObserver` из `usehooks-ts`, упрощён оркестратор и обработка sentinel.
 - `utils.ts`: схлопнут `getDataSource`, убран `getRecord`, инлайн `buildUrl`.
 - `useContainerHeight.ts`: `ResizeObserver` и `resize` listener заменены на `useResizeObserver` и `useEventListener` из `usehooks-ts`.
+- Исправлена автоподгрузка: `useIntersectionObserver` ref передаётся напрямую, упрощён пайплайн загрузки категории, уменьшено количество `setCategoriesStatus`.
