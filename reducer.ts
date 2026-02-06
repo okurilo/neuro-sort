@@ -72,7 +72,7 @@ export const categoriesReducer = (
             const name = action.payload.name;
             const current = state.statuses[name];
             if (!current || current.status !== "pending") {
-                return { ...state, inFlight: true };
+                return state;
             }
             return {
                 ...state,

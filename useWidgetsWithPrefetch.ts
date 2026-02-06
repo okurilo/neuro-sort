@@ -337,6 +337,7 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
 
     useEffect(() => {
+        console.log(`[INFQ] TODO REMOVE observer visible=${isIntersecting}`);
         // Догружаем ещё одну категорию при первом входе sentinel в зону видимости.
         if (!isIntersecting) {
             wasIntersectingRef.current = false;
@@ -348,6 +349,14 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         wasIntersectingRef.current = true;
 
 
+        console.log(
+            `[INFQ] TODO REMOVE maybeLoadNext called ` +
+                `isIntersecting=${isIntersecting} ` +
+                `wasIntersecting=${wasIntersectingRef.current} ` +
+                `hasMore=${hasMore} ` +
+                `requestedCount=${state.requestedCount} ` +
+                `queueLength=${state.queue.length}`
+        );
         if (!hasMore) return;
 
 
@@ -376,6 +385,9 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         if (!nextName) return;
 
 
+        console.log(`[INFQ] TODO REMOVE start load category ${nextName}`);
+
+
         dispatch({ type: "category_loading", payload: { name: nextName } });
 
 
@@ -400,10 +412,17 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         const abortSignal = abortControllerRef.current.signal;
 
 
+        let finishStatus: "ok" | "error" | "aborted" = "ok";
         run()
             .then((valid) => {
-                if (abortSignal.aborted) return;
-                if (!valid) return;
+                if (abortSignal.aborted) {
+                    finishStatus = "aborted";
+                    return;
+                }
+                if (!valid) {
+                    finishStatus = "error";
+                    return;
+                }
 
 
                 const validCount = valid.length;
@@ -434,8 +453,20 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
                 }
             })
             .catch(() => {
-                if (abortSignal.aborted) return;
+                if (abortSignal.aborted) {
+                    finishStatus = "aborted";
+                    return;
+                }
+                finishStatus = "error";
                 dispatch({ type: "category_failed" });
+            })
+            .finally(() => {
+                console.log(
+                    `[INFQ] TODO REMOVE finish load category ${nextName} status=${finishStatus}`
+                );
+                console.log(
+                    `[INFQ] TODO REMOVE lock state after finish inFlight_expected=false inFlight_now=${state.inFlight}`
+                );
             });
     }, [
         preparedCount,
