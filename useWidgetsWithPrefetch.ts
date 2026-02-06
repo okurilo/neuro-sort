@@ -389,8 +389,22 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
 
     useEffect(() => {
         // Поднимаем одну категорию за раз, пока requestedCount > preparedCount.
-        if (state.inFlight) return;
-        if (state.requestedCount <= preparedCount) return;
+        if (state.inFlight) {
+            console.log(
+                `[INFQ] loadEffect req=${state.requestedCount} ` +
+                    `prep=${preparedCount} inFlight=${state.inFlight} ` +
+                    `q=${state.queue.length} next=null status=null reason=inFlight`
+            );
+            return;
+        }
+        if (state.requestedCount <= preparedCount) {
+            console.log(
+                `[INFQ] loadEffect req=${state.requestedCount} ` +
+                    `prep=${preparedCount} inFlight=${state.inFlight} ` +
+                    `q=${state.queue.length} next=null status=null reason=requested<=prepared`
+            );
+            return;
+        }
 
 
         const nextName = findPendingCategory(
@@ -398,7 +412,21 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
             state.statuses,
             state.requestedCount
         );
-        if (!nextName) return;
+        if (!nextName) {
+            console.log(
+                `[INFQ] loadEffect req=${state.requestedCount} ` +
+                    `prep=${preparedCount} inFlight=${state.inFlight} ` +
+                    `q=${state.queue.length} next=null status=null reason=nextName_null`
+            );
+            return;
+        }
+
+        console.log(
+            `[INFQ] loadEffect req=${state.requestedCount} ` +
+                `prep=${preparedCount} inFlight=${state.inFlight} ` +
+                `q=${state.queue.length} next=${nextName} ` +
+                `status=${state.statuses[nextName]?.status ?? "null"} reason=continue`
+        );
 
 
         console.log(`[INFQ] TODO REMOVE start load category ${nextName}`);
