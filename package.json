@@ -1,0 +1,26 @@
+{
+  "name": "neuro-sort",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/okurilo/neuro-sort.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/okurilo/neuro-sort/issues"
+  },
+  "homepage": "https://github.com/okurilo/neuro-sort#readme",
+  "description": "",
+  "dependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.2.1",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3"
+  }
+}
