@@ -89,6 +89,19 @@ export const categoriesReducer = (
             if (!current) {
                 return { ...state, inFlight: false };
             }
+            const preparedBefore = state.preparedCount;
+            const preparedAfter = action.payload.preparedCount;
+            const preparedDelta = preparedAfter - preparedBefore;
+            console.log(
+                `[INFQ] category_resolved name=${name} ` +
+                    `preparedBefore=${preparedBefore} preparedAfter=${preparedAfter} ` +
+                    `delta=${preparedDelta} ` +
+                    `added=leading_categories status=${action.payload.status.status}`
+            );
+            const nextRequestedCount =
+                preparedAfter > state.requestedCount
+                    ? Math.min(preparedAfter, state.queue.length)
+                    : state.requestedCount;
             return {
                 ...state,
                 inFlight: false,
@@ -97,6 +110,7 @@ export const categoriesReducer = (
                     [name]: action.payload.status,
                 },
                 preparedCount: action.payload.preparedCount,
+                requestedCount: nextRequestedCount,
             };
         }
         case "category_failed": {

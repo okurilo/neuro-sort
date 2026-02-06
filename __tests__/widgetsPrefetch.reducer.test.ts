@@ -55,4 +55,24 @@ describe("categoriesReducer deadlocks", () => {
         });
         expect(next.inFlight).toBe(false);
     });
+
+    it("T4: category_resolved подтягивает requestedCount при prep jump (req<prep)", () => {
+        const state = makeState({
+            queue: ["A", "B", "C", "D", "E", "F", "G", "H"],
+            requestedCount: 5,
+            preparedCount: 4,
+            inFlight: true,
+        });
+        const status: CategoryStatus = {
+            status: "ready",
+            validWidgets: [],
+            validCount: 1,
+        };
+        const next = categoriesReducer(state, {
+            type: "category_resolved",
+            payload: { name: "A", status, preparedCount: 7 },
+        });
+        expect(next.preparedCount).toBe(7);
+        expect(next.requestedCount).toBe(7);
+    });
 });
