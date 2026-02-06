@@ -20,17 +20,21 @@ useWidgetsWithPrefetch.ts:316 [INFQ] TODO REMOVE wasIntersecting_before=true
 useWidgetsWithPrefetch.ts:348 [INFQ] loadEffect req=3 prep=0 inFlight=true q=10 next=null status=null reason=inFlight
 useWidgetsWithPrefetch.ts:452 [INFQ] TODO REMOVE finish load category важно status=ok
 useWidgetsWithPrefetch.ts:455 [INFQ] TODO REMOVE lock state after finish inFlight_expected=false inFlight_now=false
+reducer.ts:95 [INFQ] category_resolved name=важно preparedBefore=0 preparedAfter=1 delta=1 added=leading_categories status=ready
 useWidgetsWithPrefetch.ts:378 [INFQ] loadEffect req=3 prep=1 inFlight=false q=10 next=для меня status=pending reason=continue
 useWidgetsWithPrefetch.ts:385 [INFQ] TODO REMOVE start load category для меня
 useWidgetsWithPrefetch.ts:348 [INFQ] loadEffect req=3 prep=1 inFlight=true q=10 next=null status=null reason=inFlight
 useWidgetsWithPrefetch.ts:452 [INFQ] TODO REMOVE finish load category для меня status=ok
 useWidgetsWithPrefetch.ts:455 [INFQ] TODO REMOVE lock state after finish inFlight_expected=false inFlight_now=false
+reducer.ts:95 [INFQ] category_resolved name=для меня preparedBefore=1 preparedAfter=2 delta=1 added=leading_categories status=ready
 useWidgetsWithPrefetch.ts:378 [INFQ] loadEffect req=3 prep=2 inFlight=false q=10 next=моя команда status=pending reason=continue
 useWidgetsWithPrefetch.ts:385 [INFQ] TODO REMOVE start load category моя команда
 useWidgetsWithPrefetch.ts:452 [INFQ] TODO REMOVE finish load category моя команда status=ok
 useWidgetsWithPrefetch.ts:455 [INFQ] TODO REMOVE lock state after finish inFlight_expected=false inFlight_now=false
-useWidgetsWithPrefetch.ts:356 [INFQ] loadEffect req=3 prep=3 inFlight=false q=10 next=null status=null reason=requested<=prepared
+useWidgetsWithPrefetch.ts:348 [INFQ] loadEffect req=3 prep=2 inFlight=true q=10 next=null status=null reason=inFlight
+reducer.ts:95 [INFQ] category_resolved name=моя команда preparedBefore=2 preparedAfter=3 delta=1 added=leading_categories status=ready
 useWidgetsWithPrefetch.ts:309 [INFQ] TODO REMOVE observer visible=false
+useWidgetsWithPrefetch.ts:356 [INFQ] loadEffect req=3 prep=3 inFlight=false q=10 next=null status=null reason=requested<=prepared
 useWidgetsWithPrefetch.ts:309 [INFQ] TODO REMOVE observer visible=true
 useWidgetsWithPrefetch.ts:316 [INFQ] TODO REMOVE wasIntersecting_before=false
 useWidgetsWithPrefetch.ts:322 [INFQ] TODO REMOVE maybeLoadNext called isIntersecting=true wasIntersecting=true hasMore=true requestedCount=3 queueLength=10
@@ -39,9 +43,10 @@ useWidgetsWithPrefetch.ts:309 [INFQ] TODO REMOVE observer visible=true
 useWidgetsWithPrefetch.ts:316 [INFQ] TODO REMOVE wasIntersecting_before=true
 useWidgetsWithPrefetch.ts:378 [INFQ] loadEffect req=4 prep=3 inFlight=false q=10 next=развитие status=pending reason=continue
 useWidgetsWithPrefetch.ts:385 [INFQ] TODO REMOVE start load category развитие
+useWidgetsWithPrefetch.ts:348 [INFQ] loadEffect req=4 prep=3 inFlight=true q=10 next=null status=null reason=inFlight
 useWidgetsWithPrefetch.ts:452 [INFQ] TODO REMOVE finish load category развитие status=ok
 useWidgetsWithPrefetch.ts:455 [INFQ] TODO REMOVE lock state after finish inFlight_expected=false inFlight_now=false
-useWidgetsWithPrefetch.ts:348 [INFQ] loadEffect req=4 prep=3 inFlight=true q=10 next=null status=null reason=inFlight
+reducer.ts:95 [INFQ] category_resolved name=развитие preparedBefore=3 preparedAfter=4 delta=1 added=leading_categories status=ready
 useWidgetsWithPrefetch.ts:356 [INFQ] loadEffect req=4 prep=4 inFlight=false q=10 next=null status=null reason=requested<=prepared
 useWidgetsWithPrefetch.ts:309 [INFQ] TODO REMOVE observer visible=false
 useWidgetsWithPrefetch.ts:309 [INFQ] TODO REMOVE observer visible=true
@@ -55,4 +60,18 @@ useWidgetsWithPrefetch.ts:385 [INFQ] TODO REMOVE start load category эффек�
 useWidgetsWithPrefetch.ts:452 [INFQ] TODO REMOVE finish load category эффективность status=ok
 useWidgetsWithPrefetch.ts:455 [INFQ] TODO REMOVE lock state after finish inFlight_expected=false inFlight_now=false
 useWidgetsWithPrefetch.ts:348 [INFQ] loadEffect req=5 prep=4 inFlight=true q=10 next=null status=null reason=inFlight
-useWidgetsWithPrefetch.ts:356 [INFQ] loadEffect req=5 prep=7 inFlight=false q=10 next=null status=null reason=requested<=prepared
+reducer.ts:95 [INFQ] category_resolved name=эффективность preparedBefore=4 preparedAfter=7 delta=3 added=leading_categories status=ready
+useWidgetsWithPrefetch.ts:309 [INFQ] TODO REMOVE observer visible=true
+useWidgetsWithPrefetch.ts:316 [INFQ] TODO REMOVE wasIntersecting_before=false
+useWidgetsWithPrefetch.ts:322 [INFQ] TODO REMOVE maybeLoadNext called isIntersecting=true wasIntersecting=true hasMore=true requestedCount=7 queueLength=10
+useWidgetsWithPrefetch.ts:336 [INFQ] TODO REMOVE dispatch request_more requestedCount=8
+useWidgetsWithPrefetch.ts:356 [INFQ] loadEffect req=7 prep=7 inFlight=false q=10 next=null status=null reason=requested<=prepared
+useWidgetsWithPrefetch.ts:309 [INFQ] TODO REMOVE observer visible=true
+useWidgetsWithPrefetch.ts:316 [INFQ] TODO REMOVE wasIntersecting_before=true
+useWidgetsWithPrefetch.ts:378 [INFQ] loadEffect req=8 prep=7 inFlight=false q=10 next=сервисные/расчёты status=pending reason=continue
+useWidgetsWithPrefetch.ts:385 [INFQ] TODO REMOVE start load category сервисные/расчёты
+useWidgetsWithPrefetch.ts:452 [INFQ] TODO REMOVE finish load category сервисные/расчёты status=ok
+useWidgetsWithPrefetch.ts:455 [INFQ] TODO REMOVE lock state after finish inFlight_expected=false inFlight_now=false
+useWidgetsWithPrefetch.ts:348 [INFQ] loadEffect req=8 prep=7 inFlight=true q=10 next=null status=null reason=inFlight
+reducer.ts:95 [INFQ] category_resolved name=сервисные/расчёты preparedBefore=7 preparedAfter=8 delta=1 added=leading_categories status=ready
+useWidgetsWithPrefetch.ts:356 [INFQ] loadEffect req=8 prep=8 inFlight=false q=10 next=null status=null reason=requested<=prepared
