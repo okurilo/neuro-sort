@@ -57,7 +57,7 @@ const Grid: FC<{
     );
 };
 
-export const Widgets = () => {
+export const WidgetsShelves = () => {
     const widgets = useStore($widgets);
     const isShowWidgets = useStore($widgetsShow);
 
