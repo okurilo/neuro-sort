@@ -138,4 +138,116 @@ describe("useWidgetsWithPrefetch sentinel one-time trigger", () => {
 
         useReducerMock.mockReset();
     });
+
+    it("залипание после N категорий: при постоянном intersect должны идти повторные request_more", async () => {
+        const dispatch = jest.fn();
+        const queue = ["A", "B", "C", "D", "E", "F", "G", "H"];
+        let state = makeState({
+            requestedCount: 2,
+            preparedCount: 2,
+            inFlight: false,
+            queue,
+            statuses: {
+                A: { status: "ready", validWidgets: [], validCount: 1 },
+                B: { status: "ready", validWidgets: [], validCount: 1 },
+                C: { status: "pending", validWidgets: [], validCount: 0 },
+                D: { status: "pending", validWidgets: [], validCount: 0 },
+                E: { status: "pending", validWidgets: [], validCount: 0 },
+                F: { status: "pending", validWidgets: [], validCount: 0 },
+                G: { status: "pending", validWidgets: [], validCount: 0 },
+                H: { status: "pending", validWidgets: [], validCount: 0 },
+            },
+            candidates: { A: [], B: [], C: [], D: [], E: [], F: [], G: [], H: [] },
+        });
+
+        const useReducerMock = React.useReducer as jest.Mock;
+        useReducerMock.mockImplementation(() => [state, dispatch]);
+
+        __setIntersecting(true);
+        const widgets = [{ id: "1", code: "x", availableSizes: "minor" }];
+
+        const { rerender } = renderHook(() => useWidgetsWithPrefetch(widgets));
+        await act(async () => {});
+
+        const initialRequestMoreCalls = dispatch.mock.calls.filter((call) => {
+            const action = call[0] as DispatchCall;
+            return action?.type === "request_more";
+        });
+        expect(initialRequestMoreCalls.length).toBe(1);
+
+        dispatch.mockClear();
+
+        state = makeState({
+            requestedCount: 2,
+            preparedCount: 2,
+            inFlight: false,
+            queue,
+            statuses: {
+                A: { status: "ready", validWidgets: [], validCount: 1 },
+                B: { status: "ready", validWidgets: [], validCount: 1 },
+                C: { status: "pending", validWidgets: [], validCount: 0 },
+                D: { status: "pending", validWidgets: [], validCount: 0 },
+                E: { status: "pending", validWidgets: [], validCount: 0 },
+                F: { status: "pending", validWidgets: [], validCount: 0 },
+                G: { status: "pending", validWidgets: [], validCount: 0 },
+                H: { status: "pending", validWidgets: [], validCount: 0 },
+            },
+            candidates: { A: [], B: [], C: [], D: [], E: [], F: [], G: [], H: [] },
+        });
+        rerender();
+        await act(async () => {});
+
+        const noProgressCalls = dispatch.mock.calls.filter((call) => {
+            const action = call[0] as DispatchCall;
+            return action?.type === "request_more";
+        });
+        expect(noProgressCalls.length).toBe(0);
+
+        for (let i = 3; i <= 6; i += 1) {
+            state = makeState({
+                requestedCount: i,
+                preparedCount: i,
+                inFlight: false,
+                queue,
+                statuses: {
+                    A: { status: "ready", validWidgets: [], validCount: 1 },
+                    B: { status: "ready", validWidgets: [], validCount: 1 },
+                    C: {
+                        status: i >= 3 ? "ready" : "pending",
+                        validWidgets: [],
+                        validCount: i >= 3 ? 1 : 0,
+                    },
+                    D: {
+                        status: i >= 4 ? "ready" : "pending",
+                        validWidgets: [],
+                        validCount: i >= 4 ? 1 : 0,
+                    },
+                    E: {
+                        status: i >= 5 ? "ready" : "pending",
+                        validWidgets: [],
+                        validCount: i >= 5 ? 1 : 0,
+                    },
+                    F: {
+                        status: i >= 6 ? "ready" : "pending",
+                        validWidgets: [],
+                        validCount: i >= 6 ? 1 : 0,
+                    },
+                    G: { status: "pending", validWidgets: [], validCount: 0 },
+                    H: { status: "pending", validWidgets: [], validCount: 0 },
+                },
+                candidates: { A: [], B: [], C: [], D: [], E: [], F: [], G: [], H: [] },
+            });
+            rerender();
+            await act(async () => {});
+        }
+
+        const requestMoreCalls = dispatch.mock.calls.filter((call) => {
+            const action = call[0] as DispatchCall;
+            return action?.type === "request_more";
+        });
+
+        expect(requestMoreCalls.length).toBe(4);
+
+        useReducerMock.mockReset();
+    });
 });

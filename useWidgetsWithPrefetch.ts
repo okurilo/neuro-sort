@@ -329,11 +329,21 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
     const { preparedCount } = state;
     const hasMore = preparedCount < state.queue.length;
 
+    const prevPreparedCountRef = useRef(preparedCount);
 
     const { ref: loadMoreObserverRef, isIntersecting } = useIntersectionObserver({
         threshold: 0,
         rootMargin: LOAD_MORE_ROOT_MARGIN,
     });
+
+    useEffect(() => {
+        if (preparedCount > prevPreparedCountRef.current) {
+            prevPreparedCountRef.current = preparedCount;
+            if (isIntersecting && hasMore) {
+                wasIntersectingRef.current = false;
+            }
+        }
+    }, [hasMore, isIntersecting, preparedCount]);
 
 
     useEffect(() => {
@@ -345,6 +355,9 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         }
 
 
+        console.log(
+            `[INFQ] TODO REMOVE wasIntersecting_before=${wasIntersectingRef.current}`
+        );
         if (wasIntersectingRef.current) return;
         wasIntersectingRef.current = true;
 
@@ -363,6 +376,9 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         const nextRequested = clampRequestedCount(
             state.requestedCount + 1,
             state.queue.length
+        );
+        console.log(
+            `[INFQ] TODO REMOVE dispatch request_more requestedCount=${nextRequested}`
         );
         dispatch({
             type: "request_more",
