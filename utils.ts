@@ -3,21 +3,12 @@ import { RootProps } from "@sber-hrp-neuro/renderer/components/Renderer/types";
 import URI from "urijs";
 import URITemplate from "urijs/src/URITemplate";
 
+
 import type { IWidget } from "../../types";
+
 
 type RendererDataSource = NonNullable<RootProps["dataSource"]>;
 
-/**
- * Проверяет, что значение является объектом-словарём.
- */
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null;
-
-/**
- * Безопасно приводит значение к Record.
- */
-const toRecord = (value: unknown): Record<string, unknown> | null =>
-    isRecord(value) ? value : null;
 
 /**
  * Собирает URL для renderer-данных из template + options.
@@ -33,6 +24,7 @@ const buildRendererUrl = (
         .valueOf();
 };
 
+
 /**
  * Загружает данные для renderer-виджета через dataSource.
  */
@@ -43,6 +35,7 @@ export const loadRendererData = async (
     const { method, options = {}, url: uriTemplate } = dataSource;
     const url = buildRendererUrl(uriTemplate, options);
 
+
     const response = await httpClient(url, {
         body: options.requestBody,
         headers: options.headers,
@@ -50,85 +43,84 @@ export const loadRendererData = async (
         signal: abortController.signal,
     });
 
+
     return response.json();
 };
 
+
 /**
- * Ищет первый http.* action в onMount.
+ * Функция для миграции запросов из старого формата onMount в новый формат dataSource.
+ * Выполняет поиск первого HTTP-запроса, перекладывает его в корень конфига
+ * и удаляет из списка триггеров.
  */
-const findHttpActionIndex = (actions: unknown[]): number => {
-    for (let i = 0; i < actions.length; i++) {
-        const action = actions[i];
-        const actionObj = toRecord(action);
-        if (!actionObj) {
-            // no-op
-        } else {
-            const type = actionObj.type;
-            if (typeof type === "string" && type.startsWith("http.")) {
-                return i;
-            }
+export const migrateOnMountToDataSource = (
+    body: any
+): Pick<IWidget, "body" | "dataSource"> => {
+    const onMountAction = body?.triggers?.onMount?.action;
+
+
+    if (!Array.isArray(onMountAction)) {
+        return body;
+    }
+
+
+    // Находим индекс первого действия, которое является HTTP-запросом
+    const requestIndex = onMountAction.findIndex((action: any) =>
+        action.type?.startsWith("http.")
+    );
+
+
+    if (requestIndex === -1) {
+        return body;
+    }
+
+
+    const requestAction = onMountAction[requestIndex];
+
+
+    // Извлекаем метод из типа (например, 'http.get' -> 'get')
+    const method = requestAction.type.split(".")[1];
+
+
+    // Формируем объект dataSource по контракту
+    const dataSource = {
+        url: requestAction.url,
+        method,
+        options: {
+            // Маппинг полей из старого формата в новый
+            requestBody: requestAction.body,
+            headers: requestAction.headers,
+            requestParams: requestAction.params,
+            pathVariables: requestAction.pathVariables,
+        },
+    };
+
+
+    // Удаляем найденный запрос из массива onMount.action
+    onMountAction.splice(requestIndex, 1);
+
+
+    // Очищаем пустые узлы, чтобы не оставлять мусор в конфиге
+    if (onMountAction.length === 0) {
+        delete body.triggers.onMount;
+        if (Object.keys(body.triggers).length === 0) {
+            delete body.triggers;
         }
     }
 
-    return -1;
-};
-
-/**
- * Превращает onMount action в dataSource.
- */
-const toDataSourceFromAction = (action: Record<string, unknown>): RendererDataSource => {
-    const actionType = typeof action.type === "string" ? action.type : "";
-    const method = actionType.split(".")[1];
 
     return {
-        url: action.url as string,
-        method,
-        options: {
-            requestBody: action.body,
-            headers: action.headers,
-            requestParams: action.params,
-            pathVariables: action.pathVariables,
-        },
-    };
-};
-
-/**
- * Переносит http.* onMount в dataSource и чистит triggers.
- */
-export const migrateOnMountToDataSource = (body: unknown) => {
-    const bodyObj = toRecord(body);
-    if (!bodyObj) return body;
-
-    const triggers = toRecord(bodyObj.triggers);
-    const onMount = toRecord(triggers?.onMount);
-    const onMountAction = onMount?.action;
-
-    if (!Array.isArray(onMountAction)) return body;
-
-    const requestIndex = findHttpActionIndex(onMountAction);
-    if (requestIndex === -1) return body;
-
-    const requestAction = onMountAction[requestIndex] as Record<string, unknown>;
-    const dataSource = toDataSourceFromAction(requestAction);
-
-    onMountAction.splice(requestIndex, 1);
-
-    if (onMountAction.length === 0 && onMount && triggers) {
-        delete onMount.action;
-        if (Object.keys(onMount).length === 0) delete triggers.onMount;
-        if (Object.keys(triggers).length === 0) delete bodyObj.triggers;
-    }
-
-    return {
-        ...bodyObj,
+        ...body,
         dataSource,
     };
 };
+
 
 export interface CategoryConfig {
     codes: string[];
     ordering: number;
 }
+
 
 export const CATEGORY_MAPPING: Record<string, CategoryConfig> = {
     важно: {
@@ -208,15 +200,17 @@ export const CATEGORY_MAPPING: Record<string, CategoryConfig> = {
     },
 };
 
+
 export const FALLBACK_CATEGORY = "разное";
 
-const CODE_TO_CATEGORY: Record<string, string> = Object.entries(CATEGORY_MAPPING).reduce(
-    (acc, [categoryName, config]) => {
-        for (const code of config.codes) acc[code] = categoryName;
-        return acc;
-    },
-    {} as Record<string, string>
-);
+
+const CODE_TO_CATEGORY: Record<string, string> = Object.entries(
+    CATEGORY_MAPPING
+).reduce((acc, [categoryName, config]) => {
+    for (const code of config.codes) acc[code] = categoryName;
+    return acc;
+}, {} as Record<string, string>);
+
 
 /**
  * Валидирует бизнес-данные: пустые строки/массивы/объекты считаем невалидными.
@@ -224,57 +218,35 @@ const CODE_TO_CATEGORY: Record<string, string> = Object.entries(CATEGORY_MAPPING
 export const validateBusinessData = (data: unknown): boolean => {
     if (data === null || data === undefined) return false;
 
+
     if (typeof data === "string") return data.trim().length > 0;
     if (Array.isArray(data)) return data.length > 0;
 
+
     if (typeof data === "object") return Object.keys(data).length > 0;
+
 
     return true;
 };
 
-/**
- * Достаёт dataSource из renderer-виджета (включая миграцию).
- */
-const getRendererDataSource = (widget: IWidget): RendererDataSource | null => {
-    if (widget.type !== "renderer") return null;
-
-    const body = toRecord(widget.body);
-    if (body?.dataSource) {
-        return body.dataSource as RendererDataSource;
-    }
-
-    const migratedBody = migrateOnMountToDataSource(widget.body);
-    const migratedRecord = toRecord(migratedBody);
-    if (migratedRecord?.dataSource) {
-        return migratedRecord.dataSource as RendererDataSource;
-    }
-
-    return null;
-};
-
-/**
- * Достаёт dataSource из importedWidget.
- */
-const getImportedWidgetDataSource = (widget: IWidget): RendererDataSource | null => {
-    if (widget.type !== "importedWidget") return null;
-    const record = toRecord(widget as unknown);
-    if (!record?.dataSource) return null;
-    return record.dataSource as RendererDataSource;
-};
 
 /**
  * Унифицированно возвращает dataSource для виджета, если есть.
  */
-export const getDataSource = (widget: IWidget): RendererDataSource | null => {
-    return getRendererDataSource(widget) ?? getImportedWidgetDataSource(widget);
+export const getDataSource = (widget: IWidget): IWidget["dataSource"] => {
+    return migrateOnMountToDataSource(widget).dataSource;
 };
+
 
 /**
  * Раскладывает виджеты по категориям, лишние уходят в FALLBACK_CATEGORY.
  */
-export const categorizeWidgets = (widgets: IWidget[]): Record<string, IWidget[]> => {
+export const categorizeWidgets = (
+    widgets: IWidget[]
+): Record<string, IWidget[]> => {
     const result: Record<string, IWidget[]> = {};
     const fallback: IWidget[] = [];
+
 
     for (const widget of widgets) {
         const categoryName = CODE_TO_CATEGORY[widget.code];
@@ -286,9 +258,11 @@ export const categorizeWidgets = (widgets: IWidget[]): Record<string, IWidget[]>
         }
     }
 
+
     if (fallback.length > 0) {
         result[FALLBACK_CATEGORY] = fallback;
     }
+
 
     return result;
 };

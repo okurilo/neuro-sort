@@ -1,5 +1,5 @@
 import type { IWidget } from "../../types";
-import type { WidgetWithPrefetch, CategoryStatus } from "./useWidgetsWithPrefetch.types";
+import type { WidgetWithPrefetch, CategoryStatus } from "./types";
 
 /**
  * Состояние prefetch-очереди категорий.
@@ -18,20 +18,20 @@ export interface CategoriesState {
  */
 export type CategoriesAction =
     | {
-          type: "reset";
-          payload: {
-              queue: string[];
-              statuses: Record<string, CategoryStatus>;
-              candidates: Record<string, IWidget[]>;
-              requestedCount: number;
-          };
-      }
+        type: "reset";
+        payload: {
+            queue: string[];
+            statuses: Record<string, CategoryStatus>;
+            candidates: Record<string, IWidget[]>;
+            requestedCount: number;
+        };
+    }
     | { type: "request_more"; payload: { requestedCount: number } }
     | { type: "category_loading"; payload: { name: string } }
     | {
-          type: "category_resolved";
-          payload: { name: string; status: CategoryStatus; preparedCount: number };
-      }
+        type: "category_resolved";
+        payload: { name: string; status: CategoryStatus; preparedCount: number };
+    }
     | { type: "category_failed" };
 
 /**
