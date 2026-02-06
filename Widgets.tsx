@@ -67,7 +67,7 @@ export const Widgets = () => {
 
     const { addToBatch } = useBatchAnalytics();
 
-    const { preparedCategories, hasMore, loadMoreObserverRef } =
+    const { preparedCategories, hasMore, loadMoreObserverRef, debug } =
         useWidgetsWithPrefetch(widgets);
 
     const [isWidgetModuleReady, setIsWidgetModuleReady] = useState(false);
@@ -87,6 +87,17 @@ export const Widgets = () => {
             mounted = false;
         };
     }, []);
+
+    useEffect(() => {
+        if (!isShowWidgets) {
+            console.log(
+                `[INFQ] ui_lock show=${isShowWidgets} ` +
+                    `inFlight=${debug.inFlight} req=${debug.requestedCount} ` +
+                    `prep=${debug.preparedCount} q=${debug.queueLength} ` +
+                    `hasMore=${hasMore} isIntersecting=${debug.isIntersecting}`
+            );
+        }
+    }, [debug, hasMore, isShowWidgets]);
 
     const renderCategory = (category: { title: string; widgets: WidgetWithPrefetch[] }) => {
         if (!isWidgetModuleReady) return null;

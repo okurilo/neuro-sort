@@ -540,5 +540,12 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         preparedCategories,
         hasMore,
         loadMoreObserverRef,
+        debug: {
+            inFlight: state.inFlight,
+            requestedCount: state.requestedCount,
+            preparedCount,
+            queueLength: state.queue.length,
+            isIntersecting,
+        },
     };
 };
