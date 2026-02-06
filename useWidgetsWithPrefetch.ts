@@ -535,6 +535,18 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
         [preparedCount, state.queue, state.statuses]
     );
 
+    const nextPendingName = findPendingCategory(
+        state.queue,
+        state.statuses,
+        state.requestedCount
+    );
+    const nextPendingStatus = nextPendingName
+        ? state.statuses[nextPendingName]?.status
+        : undefined;
+    const nextCandidatesLen = nextPendingName
+        ? (state.candidates[nextPendingName] || []).length
+        : 0;
+
 
     return {
         preparedCategories,
@@ -546,6 +558,9 @@ export const useWidgetsWithPrefetch = (widgets: IWidget[]) => {
             preparedCount,
             queueLength: state.queue.length,
             isIntersecting,
+            nextPendingName,
+            nextPendingStatus,
+            nextCandidatesLen,
         },
     };
 };

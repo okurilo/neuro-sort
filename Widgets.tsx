@@ -119,7 +119,28 @@ export const Widgets = () => {
 
             {hasMore && (
                 <div ref={loadMoreObserverRef}>
-                    <LoadingMoreIndicator />
+                    {(() => {
+                        const reason =
+                            debug.nextPendingName === null
+                                ? "nextName_null"
+                                : debug.nextPendingStatus === "loading"
+                                    ? "status_loading"
+                                    : debug.nextPendingStatus === "pending"
+                                        ? "status_pending"
+                                        : debug.nextPendingStatus === "ready"
+                                            ? "status_ready"
+                                            : debug.nextPendingStatus === "empty"
+                                                ? "status_empty"
+                                                : "status_undefined";
+                        console.log(
+                            `[INFQ] render_category name=${debug.nextPendingName ?? "null"} ` +
+                                `status=${debug.nextPendingStatus ?? "undefined"} ` +
+                                `validCount=NA ` +
+                                `candidatesLen=${debug.nextCandidatesLen} ` +
+                                `reason=${reason}`
+                        );
+                        return <LoadingMoreIndicator />;
+                    })()}
                 </div>
             )}
         </WidgetsContainerStyled>
